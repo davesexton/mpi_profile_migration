@@ -163,6 +163,7 @@ journal_client_visit_type=P14
     SET log_file_path = csv_file_path || 'migration.log';
 
     EXECUTE ('xp_cmdshell ''del "' || log_file_path || '"''');
+    EXECUTE ('xp_cmdshell ''del "' || csv_file_path || 'documents.zip"''');
 
     CALL logger('Start migration', log_file_path);
 
@@ -1663,29 +1664,6 @@ journal_client_visit_type=P14
 
 -- Load data for JOURNALS
 
---    SELECT
---      event_type
---      ,REPLACE(REPLACE(journal_type, 'journal_', ''), '_type', '') AS journal_type
---    INTO #journal_codes
---    FROM
---      (SELECT
---         [value] AS event_type
---         ,[key] AS journal_type
---       FROM #p7m_vars
---       WHERE [key] IN('journal_general_type', 'journal_send_email_type', 'journal_call_made_log_type')
---       UNION ALL
---       SELECT
---         [value] AS event_type
---         ,[key] || '_attended' AS journal_type
---       FROM #p7m_vars
---       WHERE [key] IN('journal_client_visit_type')
---       UNION ALL
---       SELECT
---         [value] AS event_type
---         ,[key] || '_attended' AS journal_type
---       FROM #p7m_vars
---       WHERE [key] IN('journal_client_visit_type')) a;
-
     SELECT
       e.event_ref AS [journal_id]
       ,e.event_date AS [datetime]
@@ -1877,7 +1855,18 @@ journal_client_visit_type=P14
           || ' TO ''' || csv_file_path
           || tname
           || '.csv'' FORMAT ASCII QUOTES off ESCAPES off'
-        FROM #p7m_meta;
+        FROM #p7m_meta
+        UNION ALL
+        SELECT
+          'UNLOAD SELECT ''"'
+          || zip_exe_path
+          || '" a -tzip "'
+          || csv_file_path
+          || 'documents.zip" "'' || document_path || ''"'' '
+          || ' FROM #p7m_documents'
+          || ' TO ''' || csv_file_path
+          || 'documents.bat'' '
+          || ' FORMAT ASCII QUOTES off ESCAPES off';
 
       OPEN c_csv;
 
@@ -1896,6 +1885,14 @@ journal_client_visit_type=P14
       DEALLOCATE c_csv;
 
     END;
+
+----------------------------------------------------------------------------
+
+-- Create Documents Zip
+
+    CALL logger('Create ZIP file', log_file_path);
+
+    EXECUTE ('xp_cmdshell ''"' || csv_file_path || 'documents.bat" ''');
 
 ----------------------------------------------------------------------------
 
