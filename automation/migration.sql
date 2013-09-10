@@ -4,6 +4,7 @@ BEGIN
 
   SET var_text = '
 teams=BKCH,CMCH,CMIC,MSCH,PSCH,DUMMY,SITL,SLEM,VDPL
+zip_exe_path=C:\Documents and Settings\davesexton\Desktop\migration\bin\7za.exe
 csv_file_path=C:\Documents and Settings\davesexton\Desktop\migration\
 csv_file_pathx=s:\mig\
 migration_team=XXXX
@@ -49,6 +50,7 @@ journal_client_visit_type=P14
 
     DECLARE csv_file_path VARCHAR(255);
     DECLARE log_file_path VARCHAR(255);
+    DECLARE zip_exe_path VARCHAR(255);
     DECLARE migration_user INT;
     DECLARE migration_team VARCHAR(10);
 
@@ -152,10 +154,12 @@ journal_client_visit_type=P14
 
     SELECT
       MAX(CASE [key] WHEN 'csv_file_path' THEN [value] END)
+      ,MAX(CASE [key] WHEN 'zip_exe_path' THEN [value] END)
       ,MAX(CASE [key] WHEN 'migration_user' THEN [value] END)
       ,MAX(CASE [key] WHEN 'migration_team' THEN [value] END)
     INTO
       csv_file_path
+      ,zip_exe_path
       ,migration_user
       ,migration_team
     FROM #p7m_vars;
@@ -285,7 +289,7 @@ journal_client_visit_type=P14
     INSERT INTO #p7m_meta VALUES('x_prev_assig_cand',
       'id,assignment,candidate');
 
-   INSERT INTO #p7m_meta VALUES('interview',
+   INSERT INTO #p7m_meta VALUES('interviews',
      'interview_id,createdate,created_by,updateddate,updated_by,' ||
      'street1,street2,locality,town,county,' ||
      'post_code,country,iv_cont,stage,iv_date,' ||
@@ -338,6 +342,72 @@ journal_client_visit_type=P14
    INSERT INTO #p7m_meta VALUES('documents',
       'document_id,document_path,document_type,entity_reference,' ||
       'document_ext,document_description');
+
+----------------------------------------------------------------------------
+
+-- Load data for X_CLIENT_CON.CSV
+
+    CALL logger('Load X_CLIENT_CON', log_file_path);
+
+    SELECT
+      organisation_ref
+      ,'N' AS is_parent
+      ,NULLIF(parent_organ_ref, 0) AS parent_organ_ref
+      ,0 AS generation
+    INTO #client_list
+    FROM organisation o
+    WHERE EXISTS (SELECT 1
+                  FROM opportunity opp
+                  WHERE o.organisation_ref = opp.organisation_ref
+                    AND opp.responsible_team IN(SELECT [value]
+                                                FROM #p7m_vars WHERE [key] = 'teams'));
+    BEGIN
+      DECLARE ref INT;
+      DECLARE pc_csv CURSOR FOR
+        SELECT
+          parent_organ_ref
+        FROM #client_list
+        WHERE parent_organ_ref IS NOT NULL
+          AND generation = 0
+          AND parent_organ_ref NOT IN (SELECT organisation_ref FROM #client_list);
+      OPEN pc_csv;
+      FETCH pc_csv INTO ref;
+      WHILE SQLCODE = 0 LOOP
+        CALL get_parent (ref, 0);
+        FETCH pc_csv INTO ref;
+      END LOOP;
+      CLOSE pc_csv;
+      DEALLOCATE pc_csv;
+    END;
+
+
+    SELECT
+      IDENTITY(10) AS [id]
+      ,organisation_ref AS [client]
+      ,position_ref AS [contact]
+    INTO #p7m_x_client_con
+    FROM (
+      SELECT DISTINCT
+        pos.organisation_ref
+        ,pos.position_ref
+      FROM position pos
+      WHERE EXISTS ((SELECT 1
+                     FROM #client_list c
+                     WHERE pos.organisation_ref = c.organisation_ref)
+         OR EXISTS (SELECT 1
+                    FROM opport_role r
+                      INNER JOIN opportunity o2 ON r.opportunity_ref = o2.opportunity_ref
+                    WHERE r.person_ref = per.person_ref
+                      AND o2.responsible_team IN(SELECT [value]
+                                                 FROM #p7m_vars WHERE [key] = 'teams')
+                      AND r.role_type IN('C1')))
+        AND pos.contact_status IN(SELECT [value]
+                                  FROM #p7m_vars WHERE [key] = 'contact_contact_status_code')
+        AND pos.record_status IN(SELECT [value]
+                                 FROM #p7m_vars WHERE [key] = 'contact_record_status_code')
+         ) a;
+
+    CREATE UNIQUE INDEX  p7m_x_client_con_idx ON #p7m_x_client_con (client, contact);
 
 ----------------------------------------------------------------------------
 
@@ -412,12 +482,7 @@ journal_client_visit_type=P14
                                                  ,MAX(create_timestamp))
                                    FROM address a1
                                    WHERE a.organisation_ref = a1.organisation_ref)
-    WHERE EXISTS (SELECT 1
-                  FROM opportunity opp
-                  WHERE o.organisation_ref = opp.organisation_ref
---                    AND opp.record_status IN('L', 'L1')
-                    AND opp.responsible_team IN(SELECT [value]
-                                                FROM #p7m_vars WHERE [key] = 'teams'))
+    WHERE o.organisation_ref IN(SELECT organisation_ref FROM #client_list )
     ;
 
     CREATE UNIQUE INDEX p7m_clients_idx ON #p7m_clients (client_id);
@@ -569,7 +634,8 @@ journal_client_visit_type=P14
     FROM #p7m_contacts
       INNER JOIN search_code ON contact_id = position_ref
     WHERE search_type = 4
-      AND code_type IN(SELECT [value_int] FROM #p7m_vars WHERE [key] = 'contact_job_category_code_type');
+      AND code_type IN(SELECT [value_int]
+                       FROM #p7m_vars WHERE [key] = 'contact_job_category_code_type');
 
 ----------------------------------------------------------------------------
 
@@ -585,7 +651,8 @@ journal_client_visit_type=P14
     FROM #p7m_contacts
       INNER JOIN search_code ON contact_id = position_ref
     WHERE search_type = 4
-      AND code_type IN(SELECT [value_int] FROM #p7m_vars WHERE [key] = 'contact_skill_code_type');
+      AND code_type IN(SELECT [value_int]
+                       FROM #p7m_vars WHERE [key] = 'contact_skill_code_type');
 
 ----------------------------------------------------------------------------
 
@@ -601,7 +668,8 @@ journal_client_visit_type=P14
     FROM #p7m_contacts
       INNER JOIN search_code ON contact_id = position_ref
      WHERE search_type = 4
-      AND code_type IN(SELECT [value_int] FROM #p7m_vars WHERE [key] = 'contact_location_code_type');
+      AND code_type IN(SELECT [value_int]
+                       FROM #p7m_vars WHERE [key] = 'contact_location_code_type');
 
 ----------------------------------------------------------------------------
 
@@ -670,7 +738,8 @@ journal_client_visit_type=P14
     FROM #p7m_contract_jobs j
     WHERE EXISTS (SELECT 1
                   FROM event e
-                  WHERE type IN(SELECT [value] FROM #p7m_vars WHERE [key] = 'job_contact_fee_event_type')
+                  WHERE type IN(SELECT [value]
+                                FROM #p7m_vars WHERE [key] = 'job_contact_fee_event_type')
                     AND j.job_id = e.opportunity_ref);
 
 ----------------------------------------------------------------------------
@@ -687,7 +756,8 @@ journal_client_visit_type=P14
     FROM #p7m_contract_jobs
       INNER JOIN search_code ON job_id = opportunity_ref
     WHERE search_type = 5
-      AND code_type IN(SELECT [value_int] FROM #p7m_vars WHERE [key] = 'job_industry_code_type');
+      AND code_type IN(SELECT [value_int]
+                       FROM #p7m_vars WHERE [key] = 'job_industry_code_type');
 
 ----------------------------------------------------------------------------
 
@@ -703,7 +773,8 @@ journal_client_visit_type=P14
     FROM #p7m_contract_jobs
       INNER JOIN search_code ON job_id = opportunity_ref
     WHERE search_type = 5
-      AND code_type IN(SELECT [value_int] FROM #p7m_vars WHERE [key] = 'job_job_category_code_type');
+      AND code_type IN(SELECT [value_int]
+                       FROM #p7m_vars WHERE [key] = 'job_job_category_code_type');
 
 ----------------------------------------------------------------------------
 
@@ -719,7 +790,8 @@ journal_client_visit_type=P14
     FROM #p7m_contract_jobs
       INNER JOIN search_code ON job_id = opportunity_ref
     WHERE search_type = 5
-      AND code_type IN(SELECT [value_int] FROM #p7m_vars WHERE [key] = 'job_qualification_code_type');
+      AND code_type IN(SELECT [value_int]
+                       FROM #p7m_vars WHERE [key] = 'job_qualification_code_type');
 
 ----------------------------------------------------------------------------
 
@@ -735,7 +807,8 @@ journal_client_visit_type=P14
     FROM #p7m_contract_jobs
       INNER JOIN  search_code ON job_id = opportunity_ref
     WHERE search_type = 5
-      AND code_type IN(SELECT [value_int] FROM #p7m_vars WHERE [key] = 'job_skill_code_type');
+      AND code_type IN(SELECT [value_int]
+                       FROM #p7m_vars WHERE [key] = 'job_skill_code_type');
 
 ----------------------------------------------------------------------------
 
@@ -780,8 +853,10 @@ journal_client_visit_type=P14
     FROM opportunity opp
       LEFT OUTER JOIN address a ON opp.address_ref = a.address_ref
       LEFT OUTER JOIN permanent_vac pv ON opp.opportunity_ref = pv.opportunity_ref
-    WHERE opp.type IN(SELECT [value] FROM #p7m_vars WHERE [key] = 'job_perm_type')
-      AND opp.responsible_team IN(SELECT [value] FROM #p7m_vars WHERE [key] = 'teams');
+    WHERE opp.type IN(SELECT [value]
+                      FROM #p7m_vars WHERE [key] = 'job_perm_type')
+      AND opp.responsible_team IN(SELECT [value]
+                                  FROM #p7m_vars WHERE [key] = 'teams');
 
     CREATE UNIQUE INDEX p7m_perm_jobs_idx ON #p7m_perm_jobs (job_id);
 
@@ -823,7 +898,8 @@ journal_client_visit_type=P14
     FROM #p7m_perm_jobs
       INNER JOIN search_code ON job_id = opportunity_ref
     WHERE search_type = 5
-      AND code_type IN(SELECT [value_int] FROM #p7m_vars WHERE [key] = 'job_industry_code_type');
+      AND code_type IN(SELECT [value_int]
+                       FROM #p7m_vars WHERE [key] = 'job_industry_code_type');
 
 ----------------------------------------------------------------------------
 
@@ -839,7 +915,8 @@ journal_client_visit_type=P14
     FROM #p7m_perm_jobs
       INNER JOIN search_code ON job_id = opportunity_ref
     WHERE search_type = 5
-      AND code_type IN(SELECT [value_int] FROM #p7m_vars WHERE [key] = 'job_job_category_code_type');
+      AND code_type IN(SELECT [value_int]
+                       FROM #p7m_vars WHERE [key] = 'job_job_category_code_type');
 
 ----------------------------------------------------------------------------
 
@@ -855,7 +932,8 @@ journal_client_visit_type=P14
     FROM #p7m_perm_jobs
       INNER JOIN search_code ON job_id = opportunity_ref
     WHERE search_type = 5
-      AND code_type IN(SELECT [value_int] FROM #p7m_vars WHERE [key] = 'job_qualification_code_type');
+      AND code_type IN(SELECT [value_int]
+                       FROM #p7m_vars WHERE [key] = 'job_qualification_code_type');
 
 ----------------------------------------------------------------------------
 
@@ -871,7 +949,8 @@ journal_client_visit_type=P14
     FROM #p7m_perm_jobs
       INNER JOIN search_code ON job_id = opportunity_ref
     WHERE search_type = 5
-      AND code_type IN(SELECT [value_int] FROM #p7m_vars WHERE [key] = 'job_skill_code_type');
+      AND code_type IN(SELECT [value_int]
+                       FROM #p7m_vars WHERE [key] = 'job_skill_code_type');
 
 ----------------------------------------------------------------------------
 
@@ -902,7 +981,7 @@ journal_client_visit_type=P14
       ,CAST(NULL AS CHAR(4)) AS [high_edu_lev]
       ,CASE WHEN ptp.type IS NOT NULL AND ptc.type IS NOT NULL
             THEN CASE WHEN canc.income_required IS NOT NULL
-                      THEN ptp.type
+                      THEN ptc.type
                       ELSE ptp.type END
             ELSE ISNULL(ptp.type, ptc.type)
             END AS [def_role]
@@ -914,7 +993,7 @@ journal_client_visit_type=P14
       ,CASE per.do_not_mailshot WHEN 'Y' THEN 'N' ELSE 'Y' END AS [e_shot]
       ,CASE WHEN ptp.type IS NOT NULL AND ptc.type IS NOT NULL
             THEN CASE WHEN canc.income_required IS NOT NULL
-                      THEN ptp.type || ',' || ptc.type
+                      THEN ptc.type || ', ' || ptc.type
                       ELSE ptp.type END
             ELSE ISNULL(ptp.type, ptc.type)
             END AS [cand_type]
@@ -922,21 +1001,11 @@ journal_client_visit_type=P14
       ,canc.income_required AS [rate_req]
       ,canp.income_required AS [salary_req]
       ,canp.package_value_reqd AS [ote_req]
-      ,CASE WHEN ptp.type IS NOT NULL AND ptc.type IS NOT NULL
-            THEN CASE WHEN canc.income_required IS NOT NULL
-                      THEN NULL
-                      ELSE 'Y' END
-            WHEN ptp.type IS NOT NULL
+      ,CASE WHEN ptp.type IS NOT NULL
             THEN 'Y'
-            ELSE NULL
             END AS [p_perm]
-      ,CASE WHEN ptp.type IS NOT NULL AND ptc.type IS NOT NULL
-            THEN CASE WHEN canc.income_required IS NOT NULL
-                      THEN 'Y'
-                      ELSE NULL END
-            WHEN ptp.type IS NOT NULL
-            THEN NULL
-            ELSE 'Y'
+      ,CASE WHEN ptc.type IS NOT NULL AND canc.income_required IS NOT NULL
+            THEN 'Y'
             END AS [p_contr]
       ,CASE per.discretion_reqd WHEN 'Y' THEN 'Y' ELSE NULL END AS [relocate]
       ,ptp.notes AS [look_for]
@@ -1188,8 +1257,7 @@ journal_client_visit_type=P14
       ,prev_co_id AS [client]
     INTO #p7m_x_pa_client
     FROM #p7m_candidate_prev_assign
-    WHERE prv_manager_id IN(SELECT contact_id FROM #p7m_contacts)
-      AND prev_co_id IN(SELECT client_id FROM #p7m_clients);
+    WHERE prev_co_id IN(SELECT client_id FROM #p7m_clients);
 
 ----------------------------------------------------------------------------
 
@@ -1291,6 +1359,8 @@ journal_client_visit_type=P14
       MAX(e.event_ref) AS assignment_id
       ,MAX(CASE e.type WHEN '1PA' THEN e.create_timestamp END) AS createddate
       ,MAX(CASE e.type WHEN '1PA' THEN e.create_user END) AS created_by
+      ,GETDATE() AS updateddate
+      ,MAX(CASE e.type WHEN '1PA' THEN e.update_user END) AS updated_by
       ,MAX(CASE e.type WHEN '1PA' THEN inv.amnt1 END) AS salary
       ,MAX(CASE e.type WHEN '1PA' THEN inv.netamnt END) AS fee
       ,MAX(CASE e.type WHEN 'F' THEN plc.start_date END) AS start_dt
@@ -1327,8 +1397,8 @@ journal_client_visit_type=P14
 
     SELECT DISTINCT
       assignment_id AS [assignment_id]
-      ,createddate AS [createddate]
-      ,created_by AS [created_by]
+      ,updateddate AS [updateddate]
+      ,updated_by AS [updated_by]
       ,salary AS [salary]
       ,fee AS [fee]
       ,start_dt AS [start_dt]
@@ -1353,6 +1423,8 @@ journal_client_visit_type=P14
       e.event_ref AS assignment_id
       ,e.create_timestamp AS createddate
       ,e.create_user AS created_by
+      ,GETDATE() AS updateddate
+      ,e.update_user AS updated_by
       ,'Current' AS status
       ,tb.start_date AS start_dt
       ,tb.end_date AS end_dt
@@ -1398,6 +1470,8 @@ journal_client_visit_type=P14
       assignment_id AS [assignment_id]
       ,createddate AS [createddate]
       ,created_by AS [created_by]
+      ,updateddate AS [updateddate]
+      ,updated_by AS [updated_by]
       ,status AS [status]
       ,start_dt AS [start_dt]
       ,end_dt AS [end_dt]
@@ -1512,16 +1586,19 @@ journal_client_visit_type=P14
       ,MIN(CASE e.event_ref WHEN last_interview_event_ref THEN e.event_date END) AS [last_iv_dt]
       ,MIN(CASE e.event_ref WHEN last_interview_event_ref THEN e.event_time END) AS [last_iv_tm]
       ,MIN(CASE e.event_ref WHEN last_cv_event_ref THEN e.create_user END) AS [last_cv_by]
-      ,MIN(CASE e.event_ref WHEN last_interview_event_ref THEN e.create_user END ) AS [last_iv_by]
+      ,MIN(CASE e.event_ref WHEN last_interview_event_ref THEN e.create_user END) AS [last_iv_by]
       ,MIN(CASE e.event_ref WHEN last_offer_event_ref THEN e.event_date END) AS [last_of_dt]
-      ,MIN(CASE e.event_ref WHEN last_offer_event_ref THEN e.event_time END) AS [last_of_tm]
+      ,MIN(CASE e.event_ref WHEN last_offer_event_ref
+                            THEN CAST(update_timestamp AS TIME) END) AS [last_of_tm]
       ,MIN(CASE e.event_ref WHEN last_offer_event_ref THEN e.create_user END) AS [last_of_by]
       ,MAX(pla.income) AS [offer_sal]
-      ,MIN(CASE e.event_ref WHEN last_rejected_offer_event_ref THEN e.event_date END) AS [rej_of_dt]
-      ,MIN(CASE e.event_ref WHEN last_rejected_offer_event_ref THEN e.event_time END) AS [rej_of_tm]
+      ,MIN(CASE e.event_ref WHEN last_rejected_offer_event_ref THEN e.outcome_date END) AS [rej_of_dt]
+      ,MIN(CASE e.event_ref WHEN last_rejected_offer_event_ref
+                            THEN CAST(update_timestamp AS TIME) END) AS [rej_of_tm]
       ,MIN(CASE e.event_ref WHEN last_rejected_offer_event_ref THEN e.create_user END) AS [rej_of_by]
-      ,MIN(CASE e.event_ref WHEN last_rejected_event_ref THEN e.event_date END) AS [rej_dt]
-      ,MIN(CASE e.event_ref WHEN last_rejected_event_ref THEN e.event_time END) AS [rej_tm]
+      ,MIN(CASE e.event_ref WHEN last_rejected_event_ref THEN e.outcome_date END) AS [rej_dt]
+      ,MIN(CASE e.event_ref WHEN last_rejected_event_ref
+                            THEN CAST(update_timestamp AS TIME) END) AS [rej_tm]
       ,MIN(CASE e.event_ref WHEN last_rejected_event_ref THEN e.create_user END) AS [rej_by]
       ,MIN(CASE e.event_ref WHEN last_interview_event_ref THEN e.type END) AS [last_iv_st]
       ,MAX(CASE WHEN e.event_ref = last_event_ref
@@ -1532,7 +1609,12 @@ journal_client_visit_type=P14
                  AND e.type IN('KE03', 'Q21', 'Q31', 'Q32', 'Q33', 'Q34', 'Q35', 'Q36')
                  AND e.outcome = 'A4'
                 THEN 'Would Consider for Future' END) AS [rejected_res]
-      ,CAST(NULL AS VARCHAR(250)) AS [progress]
+      ,MAX(CASE WHEN e.event_ref = last_event_ref
+                THEN CASE WHEN e.type IN('F', 'H') AND e.outcome = 'F3'
+                          THEN 'F3'
+                          ELSE e.type
+                          END
+                END) AS [progress]
     INTO #p7m_shortlist
     FROM event e
       INNER JOIN event_role can ON e.event_ref = can.event_ref
@@ -1545,8 +1627,8 @@ journal_client_visit_type=P14
       e.opportunity_ref
       ,can.person_ref;
 
-    UPDATE #p7m_shortlist
-    SET progress = status;
+    CREATE UNIQUE INDEX p7m_shortlist_idx
+                     ON #p7m_shortlist (shortlist_id, candidate_id, job_id);
 
 ----------------------------------------------------------------------------
 
@@ -1580,9 +1662,9 @@ journal_client_visit_type=P14
 
 ----------------------------------------------------------------------------
 
--- Load data for INTERVIEW.CSV
+-- Load data for INTERVIEWS.CSV
 
-    CALL logger('Load INTERVIEW', log_file_path);
+    CALL logger('Load INTERVIEWS', log_file_path);
 
     SELECT
       e.event_ref AS [interview_id]
@@ -1609,12 +1691,12 @@ journal_client_visit_type=P14
       ,CAST(NULL AS CHAR(1)) AS [iv_att]
       ,e.opportunity_ref AS job_id
       ,er_can.person_ref AS candidate_id
-    INTO #p7m_interview
+    INTO #p7m_interviews
     FROM event e
       INNER JOIN event_role er_can ON e.event_ref = er_can.event_ref
       INNER JOIN event_role er_con ON e.event_ref = er_con.event_ref
-      INNER JOIN position con ON er_con.person_ref  = con.person_ref
-                             AND er_con.organisation_ref  = con.organisation_ref
+      INNER JOIN position con ON er_con.person_ref = con.person_ref
+                             AND er_con.organisation_ref = con.organisation_ref
       LEFT OUTER JOIN address a ON con.address_ref = a.address_ref
     WHERE e.type IN('Q31','Q32','Q33','Q34','Q35','Q36')
       AND er_can.type IN('A1','D','F','H','K')
@@ -1641,7 +1723,10 @@ journal_client_visit_type=P14
                   FROM #p7m_candidates
                   WHERE er_can.person_ref = candidate_id);
 
-    UPDATE #p7m_interview
+    CREATE UNIQUE INDEX p7m_interviews_idx
+                     ON #p7m_interviews (interview_id, candidate_id, job_id);
+
+    UPDATE #p7m_interviews
     SET iv_att = 'Y'
     WHERE interview_id IN(SELECT last_interview_event_ref FROM #shortlist_dates);
 
@@ -1656,7 +1741,7 @@ journal_client_visit_type=P14
       ,sl.shortlist_id AS [shortlist]
       ,iv.interview_id AS [interview]
     INTO #p7m_x_short_iv
-    FROM #p7m_interview iv
+    FROM #p7m_interviews iv
       INNER JOIN #p7m_shortlist sl ON iv.candidate_id = sl.candidate_id
                                   AND iv.job_id = sl.job_id;
 
@@ -1700,7 +1785,6 @@ journal_client_visit_type=P14
       AND (e.opportunity_ref IS NULL OR
            e.opportunity_ref IN(SELECT job_id FROM #p7m_contract_jobs) OR
            e.opportunity_ref IN(SELECT job_id FROM #p7m_perm_jobs));
-
 
     CALL logger('Load GENERAL_JOURNALS',log_file_path);
 
