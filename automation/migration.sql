@@ -69,38 +69,6 @@ journal_client_visit_type=P14
 
     END;
 
-    IF OBJECT_ID('get_parent') > 0 THEN
-      DROP PROCEDURE get_parent;
-    END IF;
-
-    CREATE PROCEDURE get_parent (IN ref INT, IN gen INT)
-    BEGIN
-
-      DECLARE parent_ref INT;
-
-      INSERT INTO #client_list
-      SELECT
-        organisation_ref
-        ,'Y'
-        ,parent_organ_ref
-        ,gen + 1
-      FROM organisation
-      WHERE organisation_ref = ref;
-
-      SELECT
-        parent_organ_ref
-      INTO parent_ref
-      FROM organisation
-      WHERE organisation_ref = ref
-        AND gen + 1 < 5
-        AND parent_organ_ref NOT IN (SELECT organisation_ref FROM #client_list);
-
-      IF parent_ref IS NOT NULL THEN
-        CALL get_parent (parent_ref, gen + 1)
-      END IF;
-
-    END;
-
 -- Create tables
 
     CREATE TABLE #p7m_vars
@@ -290,18 +258,18 @@ journal_client_visit_type=P14
       'id,assignment,candidate');
 
    INSERT INTO #p7m_meta VALUES('interviews',
-     'interview_id,createdate,created_by,updateddate,updated_by,' ||
+     'interview_id,createddate,created_by,updateddate,updated_by,' ||
      'street1,street2,locality,town,county,' ||
      'post_code,country,iv_cont,stage,iv_date,' ||
      'iv_start,iv_end,iv_att');
 
    INSERT INTO #p7m_meta VALUES('perm_assign',
-     'assignment_id,createddate,created_by,salary,fee,' ||
+     'assignment_id,createddate,created_by,updateddate,updated_by,salary,fee,' ||
      'start_dt,cons1,cons1_perc,fee_pec,status,job_title,assig_type,filled_dt,' ||
      'office');
 
    INSERT INTO #p7m_meta VALUES('contr_assign',
-     'assignment_id,createddate,created_by,status,start_dt,' ||
+     'assignment_id,createddate,created_by,updateddate,updated_by,status,start_dt,' ||
      'end_dt,cons1,cons1_perc,job_title,assig_type,' ||
      'filled_dt,orig_start,std_hours,std_days,prim_jcat_aw,' ||
      'exempt_aw,cont_type,margin_val,margin_pcnt,pay_period,' ||
@@ -349,102 +317,53 @@ journal_client_visit_type=P14
 
     CALL logger('Load X_CLIENT_CON', log_file_path);
 
-    SELECT
-      organisation_ref
-      ,'N' AS is_parent
-      ,NULLIF(parent_organ_ref, 0) AS parent_organ_ref
-      ,0 AS generation
+    SELECT organisation_ref
     INTO #client_list
-    FROM organisation o
-    WHERE EXISTS (SELECT 1
-                  FROM opportunity opp
-                  WHERE o.organisation_ref = opp.organisation_ref
-                    AND opp.responsible_team IN(SELECT [value]
-                                                FROM #p7m_vars WHERE [key] = 'teams'));
-    BEGIN
-      DECLARE ref INT;
-      DECLARE pc_csv CURSOR FOR
-        SELECT
-          parent_organ_ref
-        FROM #client_list
-        WHERE parent_organ_ref IS NOT NULL
-          AND generation = 0
-          AND parent_organ_ref NOT IN (SELECT organisation_ref FROM #client_list);
-      OPEN pc_csv;
-      FETCH pc_csv INTO ref;
-      WHILE SQLCODE = 0 LOOP
-        CALL get_parent (ref, 0);
-        FETCH pc_csv INTO ref;
-      END LOOP;
-      CLOSE pc_csv;
-      DEALLOCATE pc_csv;
-    END;
+    FROM opportunity
+    WHERE responsible_team IN(SELECT [value]
+                              FROM #p7m_vars WHERE [key] = 'teams');
 
+    BEGIN
+      DECLARE i INT;
+      SET i = 0;
+      WHILE (i < 5) LOOP
+        INSERT INTO #client_list
+        SELECT parent_organ_ref
+        FROM organisation org
+          INNER JOIN #client_list cl ON org.organisation_ref = cl.organisation_ref
+        WHERE parent_organ_ref NOT IN(SELECT organisation_ref FROM #client_list);
+
+        SET i = i + 1;
+      END LOOP;
+    END;
 
     SELECT
       IDENTITY(10) AS [id]
       ,organisation_ref AS [client]
       ,position_ref AS [contact]
     INTO #p7m_x_client_con
-    FROM (
-      SELECT DISTINCT
-        pos.organisation_ref
-        ,pos.position_ref
-      FROM position pos
-      WHERE EXISTS ((SELECT 1
-                     FROM #client_list c
-                     WHERE pos.organisation_ref = c.organisation_ref)
-         OR EXISTS (SELECT 1
-                    FROM opport_role r
-                      INNER JOIN opportunity o2 ON r.opportunity_ref = o2.opportunity_ref
-                    WHERE r.person_ref = per.person_ref
-                      AND o2.responsible_team IN(SELECT [value]
-                                                 FROM #p7m_vars WHERE [key] = 'teams')
-                      AND r.role_type IN('C1')))
-        AND pos.contact_status IN(SELECT [value]
-                                  FROM #p7m_vars WHERE [key] = 'contact_contact_status_code')
-        AND pos.record_status IN(SELECT [value]
-                                 FROM #p7m_vars WHERE [key] = 'contact_record_status_code')
-         ) a;
+    FROM position pos
+    WHERE EXISTS (SELECT 1
+                  FROM opport_role r
+                    INNER JOIN opportunity o2 ON r.opportunity_ref = o2.opportunity_ref
+                  WHERE r.person_ref = pos.person_ref
+                    AND o2.responsible_team IN(SELECT [value]
+                                               FROM #p7m_vars WHERE [key] = 'teams')
+                    AND r.role_type IN('C1'))
+      AND organisation_ref IN(SELECT organisation_ref FROM #client_list)
+      AND pos.contact_status IN(SELECT [value]
+                                FROM #p7m_vars WHERE [key] = 'contact_contact_status_code')
+      AND pos.record_status IN(SELECT [value]
+                               FROM #p7m_vars WHERE [key] = 'contact_record_status_code')
+    ;
 
-    CREATE UNIQUE INDEX  p7m_x_client_con_idx ON #p7m_x_client_con (client, contact);
+    CREATE UNIQUE INDEX p7m_x_client_con_idx ON #p7m_x_client_con (client, contact);
 
 ----------------------------------------------------------------------------
 
 -- Load data for CLIENTS.CSV
 
     CALL logger('Load CLIENTS', log_file_path);
-
-    SELECT
-      organisation_ref
-      ,'N' AS is_parent
-      ,NULLIF(parent_organ_ref, 0) AS parent_organ_ref
-      ,0 AS generation
-    INTO #client_list
-    FROM organisation o
-    WHERE EXISTS (SELECT 1
-                  FROM opportunity opp
-                  WHERE o.organisation_ref = opp.organisation_ref
-                    AND opp.responsible_team IN(SELECT [value]
-                                                FROM #p7m_vars WHERE [key] = 'teams'));
-    BEGIN
-      DECLARE ref INT;
-      DECLARE pc_csv CURSOR FOR
-        SELECT
-          parent_organ_ref
-        FROM #client_list
-        WHERE parent_organ_ref IS NOT NULL
-          AND generation = 0
-          AND parent_organ_ref NOT IN (SELECT organisation_ref FROM #client_list);
-      OPEN pc_csv;
-      FETCH pc_csv INTO ref;
-      WHILE SQLCODE = 0 LOOP
-        CALL get_parent (ref, 0);
-        FETCH pc_csv INTO ref;
-      END LOOP;
-      CLOSE pc_csv;
-      DEALLOCATE pc_csv;
-    END;
 
     SELECT
       o.organisation_ref AS [client_id]
@@ -482,8 +401,7 @@ journal_client_visit_type=P14
                                                  ,MAX(create_timestamp))
                                    FROM address a1
                                    WHERE a.organisation_ref = a1.organisation_ref)
-    WHERE o.organisation_ref IN(SELECT organisation_ref FROM #client_list )
-    ;
+    WHERE o.organisation_ref IN(SELECT organisation_ref FROM #client_list);
 
     CREATE UNIQUE INDEX p7m_clients_idx ON #p7m_clients (client_id);
 
@@ -502,7 +420,6 @@ journal_client_visit_type=P14
                     AND [key] IN('client_location_code_type', 'client_industry_code_type')
                   GROUP BY
                     organisation_ref) co ON cl.client_id = co.organisation_ref;
-
 
 ----------------------------------------------------------------------------
 
@@ -547,18 +464,7 @@ journal_client_visit_type=P14
       INNER JOIN person per ON pos.person_ref = per.person_ref
       LEFT OUTER JOIN organisation org ON pos.organisation_ref = org.organisation_ref
       LEFT OUTER JOIN address a ON pos.address_ref = a.address_ref
-    WHERE pos.contact_status IN(SELECT [value]
-                                FROM #p7m_vars WHERE [key] = 'contact_contact_status_code')
-      AND pos.record_status IN(SELECT [value]
-                               FROM #p7m_vars WHERE [key] = 'contact_record_status_code')
-      AND EXISTS (SELECT 1
-                  FROM opport_role r
-                    INNER JOIN opportunity o2 ON r.opportunity_ref = o2.opportunity_ref
-                  WHERE r.person_ref = per.person_ref
-                    AND o2.responsible_team IN(SELECT [value]
-                                               FROM #p7m_vars WHERE [key] = 'teams')
---                    AND o2.record_status IN('L', 'L1')
-                    AND r.role_type IN('C1'))
+    WHERE pos.position_ref IN(SELECT contact FROM #p7m_x_client_con)
     ;
 
     CREATE UNIQUE INDEX p7m_contacts_idx ON #p7m_contacts (contact_id, person_id);
@@ -1328,26 +1234,26 @@ journal_client_visit_type=P14
 
 -- Load data for X_CLIENT_CON.CSV
 
-    CALL logger('Load X_CLIENT_CON', log_file_path);
-
-    SELECT
-      IDENTITY(10) AS [id]
-      ,organisation_ref AS [client]
-      ,position_ref AS [contact]
-    INTO #p7m_x_client_con
-    FROM (
-      SELECT DISTINCT
-        pos.organisation_ref
-        ,pos.position_ref
-      FROM position pos
-      WHERE EXISTS (SELECT 1
-                    FROM #client_list c
-                    WHERE pos.organisation_ref = c.organisation_ref
-                      AND is_parent = 'N')
-        AND EXISTS (SELECT 1
-                    FROM #p7m_contacts con
-                    WHERE pos.position_ref = con.contact_id)
-         ) a;
+--    CALL logger('Load X_CLIENT_CON', log_file_path);
+--
+--    SELECT
+--      IDENTITY(10) AS [id]
+--      ,organisation_ref AS [client]
+--      ,position_ref AS [contact]
+--    INTO #p7m_x_client_con
+--    FROM (
+--      SELECT DISTINCT
+--        pos.organisation_ref
+--        ,pos.position_ref
+--      FROM position pos
+--      WHERE EXISTS (SELECT 1
+--                    FROM #client_list c
+--                    WHERE pos.organisation_ref = c.organisation_ref
+--                      AND is_parent = 'N')
+--        AND EXISTS (SELECT 1
+--                    FROM #p7m_contacts con
+--                    WHERE pos.position_ref = con.contact_id)
+--         ) a;
 
 ----------------------------------------------------------------------------
 
@@ -1397,6 +1303,8 @@ journal_client_visit_type=P14
 
     SELECT DISTINCT
       assignment_id AS [assignment_id]
+      ,createddate AS [createddate]
+      ,created_by AS [created_by]
       ,updateddate AS [updateddate]
       ,updated_by AS [updated_by]
       ,salary AS [salary]
@@ -1668,7 +1576,7 @@ journal_client_visit_type=P14
 
     SELECT
       e.event_ref AS [interview_id]
-      ,e.create_timestamp AS [createdate]
+      ,e.create_timestamp AS [createddate]
       ,e.create_user AS [created_by]
       ,GETDATE() AS [updateddate]
       ,e.update_user AS [updated_by]
@@ -1757,6 +1665,7 @@ journal_client_visit_type=P14
       ,c.contact_id AS [contact]
       ,e.organisation_ref AS [client]
       ,e.opportunity_ref AS [job]
+      ,e.person_ref AS [person]
       ,CASE WHEN jc.[key] = 'journal_general_type'
             THEN 'P7 Organisation Ref: ' || ISNULL(e.organisation_ref, '')
               || '; P7 Opportunity Ref: ' || ISNULL(e.opportunity_ref, '')
@@ -1800,6 +1709,48 @@ journal_client_visit_type=P14
     INTO #p7m_general_journals
     FROM #journals
     WHERE journal_type = 'journal_general_type';
+
+    INSERT INTO #p7m_general_journals
+    SELECT
+      NULL AS [journal_id]
+      ,[datetime]
+      ,NULL AS [consultant]
+      ,[candidate]
+      ,NULL AS [contact]
+      ,NULL AS [client]
+      ,NULL AS [job]
+      ,'P7 Candidate Ref: ' || candidate AS [notes]
+    FROM #journals
+    WHERE journal_type = 'journal_general_type'
+      AND candidate IS NOT NULL;
+
+    INSERT INTO #p7m_general_journals
+    SELECT
+      NULL AS [journal_id]
+      ,[datetime]
+      ,NULL AS [consultant]
+      ,NULL AS [candidate]
+      ,[contact]
+      ,NULL AS [client]
+      ,NULL AS [job]
+      ,'P7 Contact Ref: ' || person AS [notes]
+    FROM #journals
+    WHERE journal_type = 'journal_general_type'
+      AND person IS NOT NULL;
+
+    INSERT INTO #p7m_general_journals
+    SELECT
+      NULL AS [journal_id]
+      ,[datetime]
+      ,NULL AS [consultant]
+      ,NULL AS [candidate]
+      ,NULL AS [contact]
+      ,[client]
+      ,NULL AS [job]
+      ,'P7 Organisation Ref: ' || organisation AS [notes]
+    FROM #journals
+    WHERE journal_type = 'journal_general_type'
+      AND organisation IS NOT NULL;
 
     CALL logger('Load SEND_EMAIL_JOURNALS',log_file_path);
 
@@ -1986,10 +1937,6 @@ journal_client_visit_type=P14
 
     IF OBJECT_ID('logger') > 0 THEN
       DROP PROCEDURE logger;
-    END IF;
-
-    IF OBJECT_ID('get_parent') > 0 THEN
-      DROP PROCEDURE get_parent;
     END IF;
 
   END;
