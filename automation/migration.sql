@@ -1661,6 +1661,8 @@ journal_client_visit_type=P14
 
 -- Load data for JOURNALS
 
+    CALL logger('Load GENERAL_JOURNALS',log_file_path);
+
     SELECT
       e.event_ref AS [journal_id]
       ,e.event_date AS [datetime]
@@ -1669,13 +1671,13 @@ journal_client_visit_type=P14
       ,c.contact_id AS [contact]
       ,e.organisation_ref AS [client]
       ,e.opportunity_ref AS [job]
-      ,e.person_ref AS [person]
-      ,lu.descrpition || ': ' || REPLACE(REPLACE(e.notes, '\x0d', ''), '\x0a', '') AS [notes]
+      ,con.person_ref AS [person]
+      ,lu.description || ': ' || REPLACE(REPLACE(e.notes, '\x0d', ''), '\x0a', '') AS [notes]
       ,jc.[key] AS [journal_type]
       ,e.outcome
     INTO #journals
     FROM event e
-      INNER JOIN loookup lu ON e.type = lu.code
+      INNER JOIN lookup lu ON e.type = lu.code
       INNER JOIN #p7m_vars jc ON e.type = jc.value
       LEFT OUTER JOIN event_role can ON e.event_ref = can.event_ref
                                     AND can.type IN('A', '1', 'D', 'F', 'H', 'K')
@@ -1694,8 +1696,6 @@ journal_client_visit_type=P14
       AND (e.opportunity_ref IS NULL OR
            e.opportunity_ref IN(SELECT job_id FROM #p7m_contract_jobs) OR
            e.opportunity_ref IN(SELECT job_id FROM #p7m_perm_jobs));
-
-    CALL logger('Load GENERAL_JOURNALS',log_file_path);
 
     SELECT
       CAST(NULL AS INT) AS [journal_id]
