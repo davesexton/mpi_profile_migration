@@ -5,8 +5,8 @@ BEGIN
   SET var_text = '
 teams=BKCH,CMCH,CMIC,MSCH,PSCH,DUMMY,SITL,SLEM,VDPL
 zip_exe_path=C:\Documents and Settings\davesexton\Desktop\migration\bin\7za.exe
-csv_file_path=C:\Documents and Settings\davesexton\Desktop\migration\
-csv_file_pathx=s:\mig\
+csv_file_pathx=C:\Documents and Settings\davesexton\Desktop\migration\
+csv_file_path=s:\mig\
 migration_team=XXXX
 migration_user=0
 candidate_education_code_type=1020
@@ -317,7 +317,8 @@ journal_client_visit_type=P14
 
     CALL logger('Load X_CLIENT_CON', log_file_path);
 
-    SELECT organisation_ref
+    SELECT DISTINCT TOP 20
+      organisation_ref
     INTO #client_list
     FROM opportunity
     WHERE responsible_team IN(SELECT [value]
@@ -326,7 +327,8 @@ journal_client_visit_type=P14
     BEGIN
       DECLARE i INT;
       SET i = 0;
-      WHILE (i < 5) LOOP
+      WHILE (i < 6) LOOP
+
         INSERT INTO #client_list
         SELECT parent_organ_ref
         FROM organisation org
@@ -337,24 +339,26 @@ journal_client_visit_type=P14
       END LOOP;
     END;
 
+    CREATE UNIQUE INDEX p7m_client_list_idx ON #client_list (organisation_ref);
+
     SELECT
       IDENTITY(10) AS [id]
       ,organisation_ref AS [client]
       ,position_ref AS [contact]
     INTO #p7m_x_client_con
     FROM position pos
-    WHERE EXISTS (SELECT 1
-                  FROM opport_role r
-                    INNER JOIN opportunity o2 ON r.opportunity_ref = o2.opportunity_ref
-                  WHERE r.person_ref = pos.person_ref
-                    AND o2.responsible_team IN(SELECT [value]
-                                               FROM #p7m_vars WHERE [key] = 'teams')
-                    AND r.role_type IN('C1'))
-      AND organisation_ref IN(SELECT organisation_ref FROM #client_list)
+    WHERE organisation_ref IN(SELECT organisation_ref FROM #client_list)
       AND pos.contact_status IN(SELECT [value]
                                 FROM #p7m_vars WHERE [key] = 'contact_contact_status_code')
       AND pos.record_status IN(SELECT [value]
                                FROM #p7m_vars WHERE [key] = 'contact_record_status_code')
+      AND EXISTS (SELECT 1
+                  FROM opport_role r
+                    INNER JOIN opportunity o2 ON r.opportunity_ref = o2.opportunity_ref
+                  WHERE r.position_ref = pos.position_ref
+--                    AND o2.responsible_team IN(SELECT [value]
+--                                               FROM #p7m_vars WHERE [key] = 'teams')
+                    AND r.role_type IN('C1'))
     ;
 
     CREATE UNIQUE INDEX p7m_x_client_con_idx ON #p7m_x_client_con (client, contact);
@@ -427,7 +431,7 @@ journal_client_visit_type=P14
 
     CALL logger('Load CONTACTS', log_file_path);
 
-    SELECT TOP 800
+    SELECT
       pos.position_ref AS [contact_id]
       ,pos.person_ref AS [person_id]
       ,LEFT(pos.create_timestamp, 10) AS [createddate]
@@ -583,7 +587,7 @@ journal_client_visit_type=P14
 
     CALL logger('Load CONTRACT_JOBS', log_file_path);
 
-    SELECT TOP 800
+    SELECT TOP 20
       opp.opportunity_ref AS [job_id]
       ,LEFT(opp.create_timestamp, 10) AS [createddate]
       ,opp.create_user AS [created_by]
@@ -722,7 +726,7 @@ journal_client_visit_type=P14
 
     CALL logger('Load PERM_JOBS', log_file_path);
 
-    SELECT TOP 800
+    SELECT TOP 20
       opp.opportunity_ref AS [job_id]
       ,LEFT(opp.create_timestamp, 10) AS [createddate]
       ,opp.create_user AS [created_by]
@@ -864,7 +868,7 @@ journal_client_visit_type=P14
 
     CALL logger('Load CANDIDATES', log_file_path);
 
-    SELECT TOP 800
+    SELECT TOP 20
       per.person_ref AS [candidate_id]
       ,per.create_timestamp AS [createddate]
       ,per.create_user AS [created_by]
@@ -1113,7 +1117,7 @@ journal_client_visit_type=P14
 
     CALL logger('Load CANDIDATE_PREV_ASSIGN', log_file_path);
 
-    SELECT TOP 800
+    SELECT TOP 20
       pos.position_ref AS [prev_assign_id]
       ,pos.person_ref AS [candidate_id]
       ,pos.create_timestamp AS [createddate]
@@ -1189,8 +1193,9 @@ journal_client_visit_type=P14
       ,organisation_ref AS [client]
       ,parent_organ_ref AS [parent]
     INTO #p7m_x_client_sub
-    FROM #client_list
-    WHERE parent_organ_ref IS NOT NULL;
+    FROM organisation
+    WHERE parent_organ_ref IS NOT NULL
+      AND organisation_ref IN(SELECT organisation_ref FROM #client_list);
 
 ----------------------------------------------------------------------------
 
@@ -1217,8 +1222,7 @@ journal_client_visit_type=P14
                       AND [key] = 'client_contact_role_type')
         AND EXISTS (SELECT 1
                     FROM #client_list c
-                    WHERE o.organisation_ref = c.organisation_ref
-                      AND is_parent = 'N')
+                    WHERE o.organisation_ref = c.organisation_ref)
         AND EXISTS (SELECT 1
                     FROM #p7m_contacts c
                     WHERE rl.position_ref = c.contact_id)
@@ -1666,17 +1670,12 @@ journal_client_visit_type=P14
       ,e.organisation_ref AS [client]
       ,e.opportunity_ref AS [job]
       ,e.person_ref AS [person]
-      ,CASE WHEN jc.[key] = 'journal_general_type'
-            THEN 'P7 Organisation Ref: ' || ISNULL(e.organisation_ref, '')
-              || '; P7 Opportunity Ref: ' || ISNULL(e.opportunity_ref, '')
-              || '; P7 Contact Ref: ' || ISNULL(con.person_ref, '')
-              || '; P7 Candidate Ref: ' || ISNULL(can.person_ref, '')
-              || '; '
-            ELSE '' END || REPLACE(REPLACE(e.notes, '\x0d', ''), '\x0a', '') AS [notes]
+      ,lu.descrpition || ': ' || REPLACE(REPLACE(e.notes, '\x0d', ''), '\x0a', '') AS [notes]
       ,jc.[key] AS [journal_type]
       ,e.outcome
     INTO #journals
     FROM event e
+      INNER JOIN loookup lu ON e.type = lu.code
       INNER JOIN #p7m_vars jc ON e.type = jc.value
       LEFT OUTER JOIN event_role can ON e.event_ref = can.event_ref
                                     AND can.type IN('A', '1', 'D', 'F', 'H', 'K')
@@ -1685,7 +1684,8 @@ journal_client_visit_type=P14
       LEFT OUTER JOIN event_role cons ON e.event_ref = cons.event_ref
                                     AND cons.type = 'U1'
       LEFT OUTER JOIN #p7m_contacts c ON con.person_ref = c.person_id
-    WHERE jc.[key] IN('journal_general_type', 'journal_send_email_type',
+    WHERE lu.code_type = 123
+      AND jc.[key] IN('journal_general_type', 'journal_send_email_type',
                       'journal_call_made_log_type','journal_client_visit_type')
       AND (e.organisation_ref IS NULL OR
            e.organisation_ref IN(SELECT client_id FROM #p7m_clients))
@@ -1698,7 +1698,7 @@ journal_client_visit_type=P14
     CALL logger('Load GENERAL_JOURNALS',log_file_path);
 
     SELECT
-      [journal_id]
+      CAST(NULL AS INT) AS [journal_id]
       ,[datetime]
       ,[consultant]
       ,[candidate]
@@ -1708,12 +1708,13 @@ journal_client_visit_type=P14
       ,[notes]
     INTO #p7m_general_journals
     FROM #journals
-    WHERE journal_type = 'journal_general_type';
+    WHERE journal_type = 'journal_general_type'
+      AND ISNULL(candidate, ISNULL(contact, ISNULL(client, job))) IS NOT NULL;
 
     INSERT INTO #p7m_general_journals
     SELECT
       NULL AS [journal_id]
-      ,[datetime]
+      ,GETDATE() AS [datetime]
       ,NULL AS [consultant]
       ,[candidate]
       ,NULL AS [contact]
@@ -1727,7 +1728,7 @@ journal_client_visit_type=P14
     INSERT INTO #p7m_general_journals
     SELECT
       NULL AS [journal_id]
-      ,[datetime]
+      ,GETDATE() AS [datetime]
       ,NULL AS [consultant]
       ,NULL AS [candidate]
       ,[contact]
@@ -1736,21 +1737,38 @@ journal_client_visit_type=P14
       ,'P7 Contact Ref: ' || person AS [notes]
     FROM #journals
     WHERE journal_type = 'journal_general_type'
-      AND person IS NOT NULL;
+      AND contact IS NOT NULL;
 
     INSERT INTO #p7m_general_journals
     SELECT
       NULL AS [journal_id]
-      ,[datetime]
+      ,GETDATE() AS [datetime]
       ,NULL AS [consultant]
       ,NULL AS [candidate]
       ,NULL AS [contact]
       ,[client]
       ,NULL AS [job]
-      ,'P7 Organisation Ref: ' || organisation AS [notes]
+      ,'P7 Organisation Ref: ' || client AS [notes]
     FROM #journals
     WHERE journal_type = 'journal_general_type'
-      AND organisation IS NOT NULL;
+      AND client IS NOT NULL;
+
+    INSERT INTO #p7m_general_journals
+    SELECT
+      NULL AS [journal_id]
+      ,GETDATE() AS [datetime]
+      ,NULL AS [consultant]
+      ,NULL AS [candidate]
+      ,NULL AS [contact]
+      ,NULL AS [client]
+      ,[job]
+      ,'P7 Opportunity Ref: ' || job AS [notes]
+    FROM #journals
+    WHERE journal_type = 'journal_general_type'
+      AND job IS NOT NULL;
+
+    UPDATE #p7m_general_journals
+    SET [journal_id] = IDENTITY(10);
 
     CALL logger('Load SEND_EMAIL_JOURNALS',log_file_path);
 
