@@ -5,8 +5,8 @@ BEGIN
   SET var_text = '
 teams=BKCH,CMCH,CMIC,MSCH,PSCH,DUMMY,SITL,SLEM,VDPL
 zip_exe_path=C:\Documents and Settings\davesexton\Desktop\migration\bin\7za.exe
-csv_file_pathx=C:\Documents and Settings\davesexton\Desktop\migration\
-csv_file_path=s:\mig\
+csv_file_path=C:\Documents and Settings\davesexton\Desktop\migration\
+csv_file_pathx=s:\mig\
 migration_team=XXXX
 migration_user=0
 candidate_education_code_type=1020
@@ -317,27 +317,26 @@ journal_client_visit_type=P14
 
     CALL logger('Load X_CLIENT_CON', log_file_path);
 
-    SELECT DISTINCT TOP 20
+    SELECT DISTINCT TOP 5
       organisation_ref
     INTO #client_list
     FROM opportunity
-    WHERE responsible_team IN(SELECT [value]
-                              FROM #p7m_vars WHERE [key] = 'teams');
+    ;
 
-    BEGIN
-      DECLARE i INT;
-      SET i = 0;
-      WHILE (i < 6) LOOP
-
-        INSERT INTO #client_list
-        SELECT parent_organ_ref
-        FROM organisation org
-          INNER JOIN #client_list cl ON org.organisation_ref = cl.organisation_ref
-        WHERE parent_organ_ref NOT IN(SELECT organisation_ref FROM #client_list);
-
-        SET i = i + 1;
-      END LOOP;
-    END;
+--    BEGIN
+--      DECLARE i INT;
+--      SET i = 0;
+--      WHILE (i < 6) LOOP
+--
+--        INSERT INTO #client_list
+--        SELECT parent_organ_ref
+--        FROM organisation org
+--          INNER JOIN #client_list cl ON org.organisation_ref = cl.organisation_ref
+--        WHERE parent_organ_ref NOT IN(SELECT organisation_ref FROM #client_list);
+--
+--        SET i = i + 1;
+--      END LOOP;
+--    END;
 
     CREATE UNIQUE INDEX p7m_client_list_idx ON #client_list (organisation_ref);
 
@@ -352,13 +351,6 @@ journal_client_visit_type=P14
                                 FROM #p7m_vars WHERE [key] = 'contact_contact_status_code')
       AND pos.record_status IN(SELECT [value]
                                FROM #p7m_vars WHERE [key] = 'contact_record_status_code')
-      AND EXISTS (SELECT 1
-                  FROM opport_role r
-                    INNER JOIN opportunity o2 ON r.opportunity_ref = o2.opportunity_ref
-                  WHERE r.position_ref = pos.position_ref
---                    AND o2.responsible_team IN(SELECT [value]
---                                               FROM #p7m_vars WHERE [key] = 'teams')
-                    AND r.role_type IN('C1'))
     ;
 
     CREATE UNIQUE INDEX p7m_x_client_con_idx ON #p7m_x_client_con (client, contact);
@@ -583,11 +575,44 @@ journal_client_visit_type=P14
 
 ----------------------------------------------------------------------------
 
+-- Load data for X_CLIENT_JOB.CSV
+
+    CALL logger('Load X_CLIENT_JOB', log_file_path);
+
+    SELECT
+      IDENTITY(10) AS [id]
+      ,organisation_ref AS [client]
+      ,position_ref AS [contact]
+      ,opportunity_ref AS [job]
+    INTO #p7m_x_client_job
+    FROM (
+      SELECT DISTINCT
+        o.organisation_ref
+        ,rl.position_ref
+        ,o.opportunity_ref
+      FROM opportunity o
+        LEFT OUTER JOIN opport_role rl ON o.opportunity_ref = rl.opportunity_ref
+      WHERE EXISTS (SELECT 1
+                    FROM #p7m_vars
+                    WHERE rl.role_type = [value]
+                      AND [key] = 'client_contact_role_type')
+        AND EXISTS (SELECT 1
+                    FROM #client_list c
+                    WHERE o.organisation_ref = c.organisation_ref)
+        AND EXISTS (SELECT 1
+                    FROM #p7m_contacts c
+                    WHERE rl.position_ref = c.contact_id)
+      ) a;
+
+    CREATE UNIQUE INDEX p7m_x_client_job_idx ON #p7m_x_client_job (client, contact, job);
+
+----------------------------------------------------------------------------
+
 -- Load data for CONTRACT_JOBS.CSV
 
     CALL logger('Load CONTRACT_JOBS', log_file_path);
 
-    SELECT TOP 20
+    SELECT
       opp.opportunity_ref AS [job_id]
       ,LEFT(opp.create_timestamp, 10) AS [createddate]
       ,opp.create_user AS [created_by]
@@ -622,10 +647,12 @@ journal_client_visit_type=P14
       ,REPLACE(REPLACE(opp.notes, '\x0d', ''), '\x0a', '') AS [personal_attributes]
     INTO #p7m_contract_jobs
     FROM opportunity opp
+      INNER JOIN #p7m_x_client_job x ON opp.organisation_ref = x.client
+                                    AND opp.opportunity_ref = x.job
       LEFT OUTER JOIN address a ON opp.address_ref = a.address_ref
       LEFT OUTER JOIN temporary_vac tv ON opp.opportunity_ref = tv.opportunity_ref
     WHERE opp.type IN(SELECT [value] FROM #p7m_vars WHERE [key] = 'job_contract_type')
-       AND opp.responsible_team IN(SELECT [value] FROM #p7m_vars WHERE [key] = 'teams');
+     ;
 
     CREATE UNIQUE INDEX p7m_contract_jobs_idx ON #p7m_contract_jobs (job_id);
 
@@ -726,7 +753,7 @@ journal_client_visit_type=P14
 
     CALL logger('Load PERM_JOBS', log_file_path);
 
-    SELECT TOP 20
+    SELECT
       opp.opportunity_ref AS [job_id]
       ,LEFT(opp.create_timestamp, 10) AS [createddate]
       ,opp.create_user AS [created_by]
@@ -761,12 +788,13 @@ journal_client_visit_type=P14
       ,REPLACE(REPLACE(opp.notes, '\x0d', ''), '\x0a', '') AS [personal_attributes]
     INTO #p7m_perm_jobs
     FROM opportunity opp
+      INNER JOIN #p7m_x_client_job x ON opp.organisation_ref = x.client
+                                    AND opp.opportunity_ref = x.job
       LEFT OUTER JOIN address a ON opp.address_ref = a.address_ref
       LEFT OUTER JOIN permanent_vac pv ON opp.opportunity_ref = pv.opportunity_ref
     WHERE opp.type IN(SELECT [value]
                       FROM #p7m_vars WHERE [key] = 'job_perm_type')
-      AND opp.responsible_team IN(SELECT [value]
-                                  FROM #p7m_vars WHERE [key] = 'teams');
+     ;
 
     CREATE UNIQUE INDEX p7m_perm_jobs_idx ON #p7m_perm_jobs (job_id);
 
@@ -864,11 +892,187 @@ journal_client_visit_type=P14
 
 ----------------------------------------------------------------------------
 
+-- Load data for CANDIDATE_PREV_ASSIGN.CSV
+
+    CALL logger('Load CANDIDATE_PREV_ASSIGN', log_file_path);
+
+    SELECT
+      pos.position_ref AS [prev_assign_id]
+      ,pos.person_ref AS [candidate_id]
+      ,pos.create_timestamp AS [createddate]
+      ,pos.create_user AS [created_by]
+      ,GETDATE() AS [updateddate]
+      ,pos.update_user AS [updated_by]
+      ,pe.income AS [salary]
+      ,pos.record_status AS [status]
+      ,pos.start_date AS [start_date]
+      ,pos.end_date AS [end_date]
+      ,pos.displayname AS [job_title]
+      ,pos.type AS [assig_type]
+      ,org.displayname AS [prev_co]
+      ,org.organisation_ref AS prev_co_id
+      ,mgr.displayname AS [prv_manager]
+      ,mpos.position_ref AS prv_manager_id
+      ,ISNULL(mpos.telephone_number, a.telephone_number) AS [prv_man_tel]
+      ,REPLACE(REPLACE(pos.notes, '\x0d', ' '), '\x0a', ' ') AS [notes]
+      ,te.hours_details AS [pay_rate]
+    INTO #p7m_candidate_prev_assign
+    FROM position pos
+      INNER JOIN person per ON pos.person_ref = per.person_ref
+      LEFT OUTER JOIN permanent_emp pe ON pos.position_ref = pe.position_ref
+      LEFT OUTER JOIN temporary_emp te ON pos.position_ref = te.position_ref
+      LEFT OUTER JOIN organisation org ON pos.organisation_ref = org.organisation_ref
+      LEFT OUTER JOIN person mgr ON pos.manager_person_ref = mgr.person_ref
+      LEFT OUTER JOIN position mpos ON mgr.person_ref = mpos.person_ref
+                         AND mpos.contact_status IN(SELECT [value]
+                                                    FROM #p7m_vars
+                                                    WHERE [key] = 'contact_contact_status_code')
+                         AND mpos.record_status IN(SELECT [value]
+                                                   FROM #p7m_vars
+                                                   WHERE [key] = 'contact_record_status_code')
+      LEFT OUTER JOIN address a ON pos.address_ref = a.address_ref
+    WHERE pos.organisation_ref IN(SELECT client_id FROM #p7m_clients);
+
+    CREATE UNIQUE INDEX candidate_prev_assign_idx ON #p7m_candidate_prev_assign (candidate_id);
+
+----------------------------------------------------------------------------
+-- Load data for SHORTLIST.CSV
+
+    CALL logger('Load SHORTLIST', log_file_path);
+
+    SELECT
+      e.opportunity_ref
+      ,can.person_ref
+      ,MAX(e.event_ref) AS last_event_ref
+      ,MIN(e.event_ref) AS first_event_ref
+      ,MAX(CASE WHEN e.type IN('KE03', 'Q21')
+           THEN e.event_ref END) AS last_cv_event_ref
+      ,MAX(CASE WHEN e.type IN('Q31', 'Q32', 'Q33', 'Q34', 'Q35', 'Q36')
+           THEN e.event_ref END) AS last_interview_event_ref
+      ,MAX(CASE WHEN e.type IN('F', 'H')
+           THEN e.event_ref END) AS last_offer_event_ref
+      ,MAX(CASE WHEN e.type IN('F', 'H') AND e.outcome = 'F1'
+           THEN e.event_ref END) AS last_rejected_offer_event_ref
+      ,MAX(CASE WHEN e.type IN('KE03', 'Q21', 'Q31', 'Q32', 'Q33', 'Q34', 'Q35', 'Q36')
+                           AND e.outcome = 'A4'
+           THEN e.event_ref END) AS last_rejected_event_ref
+    INTO #shortlist_dates
+    FROM event e
+      INNER JOIN event_role can ON e.event_ref = can.event_ref
+    WHERE e.type IN('A', 'F', 'H', 'KE03', 'Q21', 'Q31', 'Q32', 'Q33', 'Q34', 'Q35', 'Q36')
+      AND can.type IN('A','1', 'D', 'F', 'H', 'K')
+      AND (e.opportunity_ref IN(SELECT job_id FROM #p7m_contract_jobs) OR
+           e.opportunity_ref IN(SELECT job_id FROM #p7m_perm_jobs))
+    GROUP BY
+      e.opportunity_ref
+      ,can.person_ref;
+
+    CREATE UNIQUE INDEX shortlist_dates_idx ON #shortlist_dates (opportunity_ref, person_ref);
+
+    SELECT
+      MIN(e.event_ref) AS [shortlist_id]
+      ,e.opportunity_ref AS job_id
+      ,e.organisation_ref AS client_id
+      ,can.person_ref AS candidate_id
+      ,con.person_ref AS person_id
+      ,MIN(e.create_timestamp) AS [createddate]
+      ,MIN(e.create_user) AS [created_by]
+      ,MIN(e.event_date) AS [date_short]
+      ,MIN(e.event_time) AS [time_short]
+      ,MAX(CASE WHEN e.event_ref = last_event_ref
+                THEN CASE WHEN e.type IN('F', 'H') AND e.outcome = 'F3'
+                            THEN 'Offer Accepted'
+                          WHEN e.type IN('F', 'H') AND e.outcome = 'F1'
+                            THEN 'Offer Rejected'
+                          WHEN e.type IN('KE03', 'Q21', 'Q31', 'Q32', 'Q33', 'Q34', 'Q35', 'Q36')
+                           AND e.outcome = 'A4'
+                            THEN 'Rejected'
+                          WHEN e.type IN('A')
+                            THEN 'Shortlisted'
+                          WHEN e.type IN('F', 'H')
+                            THEN 'Under Offer'
+                          WHEN e.type IN('KE03', 'Q21')
+                            THEN 'CV Sent'
+                          WHEN e.type IN('Q31', 'Q32', 'Q33', 'Q34', 'Q35', 'Q36')
+                            THEN 'Interview Arranged'
+                          END
+                END) AS [status]
+      ,MIN(CASE e.event_ref WHEN last_cv_event_ref THEN e.event_date END) AS [last_cv_dt]
+      ,MIN(CASE e.event_ref WHEN last_cv_event_ref THEN e.event_time END) AS [last_cv_tm]
+      ,MIN(CASE e.event_ref WHEN last_interview_event_ref THEN e.event_date END) AS [last_iv_dt]
+      ,MIN(CASE e.event_ref WHEN last_interview_event_ref THEN e.event_time END) AS [last_iv_tm]
+      ,MIN(CASE e.event_ref WHEN last_cv_event_ref THEN e.create_user END) AS [last_cv_by]
+      ,MIN(CASE e.event_ref WHEN last_interview_event_ref THEN e.create_user END) AS [last_iv_by]
+      ,MIN(CASE e.event_ref WHEN last_offer_event_ref THEN e.event_date END) AS [last_of_dt]
+      ,MIN(CASE e.event_ref WHEN last_offer_event_ref
+                            THEN CAST(update_timestamp AS TIME) END) AS [last_of_tm]
+      ,MIN(CASE e.event_ref WHEN last_offer_event_ref THEN e.create_user END) AS [last_of_by]
+      ,MAX(pla.income) AS [offer_sal]
+      ,MIN(CASE e.event_ref WHEN last_rejected_offer_event_ref THEN e.outcome_date END) AS [rej_of_dt]
+      ,MIN(CASE e.event_ref WHEN last_rejected_offer_event_ref
+                            THEN CAST(update_timestamp AS TIME) END) AS [rej_of_tm]
+      ,MIN(CASE e.event_ref WHEN last_rejected_offer_event_ref THEN e.create_user END) AS [rej_of_by]
+      ,MIN(CASE e.event_ref WHEN last_rejected_event_ref THEN e.outcome_date END) AS [rej_dt]
+      ,MIN(CASE e.event_ref WHEN last_rejected_event_ref
+                            THEN CAST(update_timestamp AS TIME) END) AS [rej_tm]
+      ,MIN(CASE e.event_ref WHEN last_rejected_event_ref THEN e.create_user END) AS [rej_by]
+      ,MIN(CASE e.event_ref WHEN last_interview_event_ref THEN e.type END) AS [last_iv_st]
+      ,MAX(CASE WHEN e.event_ref = last_event_ref
+                 AND e.type IN('KE03', 'Q21', 'Q31', 'Q32', 'Q33', 'Q34', 'Q35', 'Q36')
+                 AND e.outcome = 'A4'
+                THEN 'Agency' END) AS [rejected_by]
+      ,MAX(CASE WHEN e.event_ref = last_event_ref
+                 AND e.type IN('KE03', 'Q21', 'Q31', 'Q32', 'Q33', 'Q34', 'Q35', 'Q36')
+                 AND e.outcome = 'A4'
+                THEN 'Would Consider for Future' END) AS [rejected_res]
+      ,MAX(CASE WHEN e.event_ref = last_event_ref
+                THEN CASE WHEN e.type IN('F', 'H') AND e.outcome = 'F3'
+                          THEN 'F3'
+                          ELSE e.type
+                          END
+                END) AS [progress]
+    INTO #p7m_shortlist
+    FROM event e
+      INNER JOIN event_role can ON e.event_ref = can.event_ref
+      INNER JOIN event_role con ON e.event_ref = con.event_ref
+      LEFT OUTER JOIN placing pla ON e.event_ref = pla.event_ref
+      INNER JOIN #shortlist_dates fle ON e.opportunity_ref = fle.opportunity_ref
+                                     AND can.person_ref = fle.person_ref
+    WHERE e.type IN('A', 'F', 'H', 'KE03', 'Q21', 'Q31', 'Q32', 'Q33', 'Q34', 'Q35', 'Q36')
+      AND can.type IN('A1', 'D', 'F', 'H', 'K')
+      AND con.type IN('C1')
+    GROUP BY
+      e.opportunity_ref
+      ,con.person_ref
+      ,e.organisation_ref
+      ,can.person_ref;
+
+    CREATE UNIQUE INDEX p7m_shortlist_idx
+                     ON #p7m_shortlist (shortlist_id, candidate_id, job_id);
+
+----------------------------------------------------------------------------
+-- Load data for X_SHORT_CAND.CSV
+
+    CALL logger('Load X_SHORT_CAND', log_file_path);
+
+    SELECT
+      sl.shortlist_id AS [id]
+      ,sl.shortlist_id AS [shortlist]
+      ,sl.job_id AS [job]
+      ,sl.candidate_id AS [candidate]
+      ,con.contact_id AS [contact]
+      ,sl.client_id AS [client]
+    INTO #p7m_x_short_cand
+    FROM #p7m_shortlist sl
+      INNER JOIN #p7m_contacts con ON sl.person_id = con.person_id;
+
+----------------------------------------------------------------------------
+
 -- Load data for CANDIDATES.CSV
 
     CALL logger('Load CANDIDATES', log_file_path);
 
-    SELECT TOP 20
+    SELECT
       per.person_ref AS [candidate_id]
       ,per.create_timestamp AS [createddate]
       ,per.create_user AS [created_by]
@@ -950,7 +1154,6 @@ journal_client_visit_type=P14
                                                          END), MAX(create_timestamp))
                                   FROM address a1
                                   WHERE a.person_ref = a1.person_ref)
-
         AND a.main_address = 'Y'
         AND a.type = 'HOME'
       LEFT OUTER JOIN position pos ON per.person_ref = pos.person_ref
@@ -966,19 +1169,8 @@ journal_client_visit_type=P14
                   FROM person_type pts
                   WHERE pts.type IN('A', 'C')
                     AND per.person_ref = pts.person_ref)
-      AND EXISTS (SELECT 1
-                  FROM event_role er
-                    INNER JOIN event e ON er.event_ref = e.event_ref
-                  WHERE e.type IN('F', 'H')
-                    AND er.type IN('F', 'H')
-                    AND e.create_timestamp > DATEADD(MONTH, -24, GETDATE())
-                    AND person_ref IS NOT NULL
-                    AND EXISTS (SELECT 1
-                                FROM event_role ru
-                                WHERE ru.team IN(SELECT [value]
-                                                 FROM #p7m_vars WHERE [key] = 'teams')
-                                  AND ru.event_ref = er.event_ref)
-                    AND per.person_ref = er.person_ref)
+      AND (per.person_ref IN(SELECT candidate_id FROM #p7m_shortlist) OR
+           per.person_ref IN(SELECT candidate_id FROM #p7m_candidate_prev_assign))
     ;
 
     CREATE UNIQUE INDEX p7m_candidates_idx ON #p7m_candidates (candidate_id);
@@ -1116,49 +1308,6 @@ journal_client_visit_type=P14
 
 ----------------------------------------------------------------------------
 
--- Load data for CANDIDATE_PREV_ASSIGN.CSV
-
-    CALL logger('Load CANDIDATE_PREV_ASSIGN', log_file_path);
-
-    SELECT TOP 20
-      pos.position_ref AS [prev_assign_id]
-      ,pos.person_ref AS [candidate_id]
-      ,pos.create_timestamp AS [createddate]
-      ,pos.create_user AS [created_by]
-      ,GETDATE() AS [updateddate]
-      ,pos.update_user AS [updated_by]
-      ,pe.income AS [salary]
-      ,pos.record_status AS [status]
-      ,pos.start_date AS [start_date]
-      ,pos.end_date AS [end_date]
-      ,pos.displayname AS [job_title]
-      ,pos.type AS [assig_type]
-      ,org.displayname AS [prev_co]
-      ,org.organisation_ref AS prev_co_id
-      ,mgr.displayname AS [prv_manager]
-      ,mpos.position_ref AS prv_manager_id
-      ,ISNULL(mpos.telephone_number, a.telephone_number) AS [prv_man_tel]
-      ,REPLACE(REPLACE(pos.notes, '\x0d', ' '), '\x0a', ' ') AS [notes]
-      ,te.hours_details AS [pay_rate]
-    INTO #p7m_candidate_prev_assign
-    FROM position pos
-      INNER JOIN person per ON pos.person_ref = per.person_ref
-      LEFT OUTER JOIN permanent_emp pe ON pos.position_ref = pe.position_ref
-      LEFT OUTER JOIN temporary_emp te ON pos.position_ref = te.position_ref
-      LEFT OUTER JOIN organisation org ON pos.organisation_ref = org.organisation_ref
-      LEFT OUTER JOIN person mgr ON pos.manager_person_ref = mgr.person_ref
-      LEFT OUTER JOIN position mpos ON mgr.person_ref = mpos.person_ref
-                         AND mpos.contact_status IN(SELECT [value]
-                                                    FROM #p7m_vars
-                                                    WHERE [key] = 'contact_contact_status_code')
-                         AND mpos.record_status IN(SELECT [value]
-                                                   FROM #p7m_vars
-                                                   WHERE [key] = 'contact_record_status_code')
-      LEFT OUTER JOIN address a ON pos.address_ref = a.address_ref
-    WHERE pos.person_ref IN(SELECT candidate_id FROM #p7m_candidates);
-
-----------------------------------------------------------------------------
-
 -- Load data for X_PA_CLIENT.CSV
 
     CALL logger('Load X_PA_CLIENT', log_file_path);
@@ -1199,68 +1348,6 @@ journal_client_visit_type=P14
     FROM organisation
     WHERE parent_organ_ref IS NOT NULL
       AND organisation_ref IN(SELECT organisation_ref FROM #client_list);
-
-----------------------------------------------------------------------------
-
--- Load data for X_CLIENT_JOB.CSV
-
-    CALL logger('Load X_CLIENT_JOB', log_file_path);
-
-    SELECT
-      IDENTITY(10) AS [id]
-      ,organisation_ref AS [client]
-      ,position_ref AS [contact]
-      ,opportunity_ref AS [job]
-    INTO #p7m_x_client_job
-    FROM (
-      SELECT DISTINCT
-        o.organisation_ref
-        ,rl.position_ref
-        ,o.opportunity_ref
-      FROM opportunity o
-        LEFT OUTER JOIN opport_role rl ON o.opportunity_ref = rl.opportunity_ref
-      WHERE EXISTS (SELECT 1
-                    FROM #p7m_vars
-                    WHERE rl.role_type = [value]
-                      AND [key] = 'client_contact_role_type')
-        AND EXISTS (SELECT 1
-                    FROM #client_list c
-                    WHERE o.organisation_ref = c.organisation_ref)
-        AND EXISTS (SELECT 1
-                    FROM #p7m_contacts c
-                    WHERE rl.position_ref = c.contact_id)
-        AND (EXISTS (SELECT 1
-                     FROM #p7m_perm_jobs c
-                     WHERE o.opportunity_ref = c.job_id) OR
-             EXISTS (SELECT 1
-                     FROM #p7m_contract_jobs c
-                     WHERE o.opportunity_ref = c.job_id))
-      ) a;
-
-----------------------------------------------------------------------------
-
--- Load data for X_CLIENT_CON.CSV
-
---    CALL logger('Load X_CLIENT_CON', log_file_path);
---
---    SELECT
---      IDENTITY(10) AS [id]
---      ,organisation_ref AS [client]
---      ,position_ref AS [contact]
---    INTO #p7m_x_client_con
---    FROM (
---      SELECT DISTINCT
---        pos.organisation_ref
---        ,pos.position_ref
---      FROM position pos
---      WHERE EXISTS (SELECT 1
---                    FROM #client_list c
---                    WHERE pos.organisation_ref = c.organisation_ref
---                      AND is_parent = 'N')
---        AND EXISTS (SELECT 1
---                    FROM #p7m_contacts con
---                    WHERE pos.position_ref = con.contact_id)
---         ) a;
 
 ----------------------------------------------------------------------------
 
@@ -1417,163 +1504,23 @@ journal_client_visit_type=P14
     CALL logger('Load X_ASSIG_CAND', log_file_path);
 
     SELECT
-      IDENTITY(10) AS [id]
+      CAST(NULL AS INT) AS [id]
       ,assignment_id AS [assignment]
       ,job_id AS [job]
       ,candidate_id  AS [candidate]
     INTO #p7m_x_assig_cand
-    FROM
-      (SELECT
-        assignment_id
-        ,job_id
-        ,candidate_id
-      FROM #perm_assign_temp
-      UNION ALL
-      SELECT
-        assignment_id
-        ,job_id
-        ,candidate_id
-      FROM #contr_assign_temp) a;
+    FROM #perm_assign_temp;
 
-----------------------------------------------------------------------------
--- Load data for SHORTLIST.CSV
-
-    CALL logger('Load SHORTLIST', log_file_path);
-
+    INSERT INTO #p7m_x_assig_cand
     SELECT
-      e.opportunity_ref
-      ,can.person_ref
-      ,MAX(e.event_ref) AS last_event_ref
-      ,MIN(e.event_ref) AS first_event_ref
-      ,MAX(CASE WHEN e.type IN('KE03', 'Q21')
-           THEN e.event_ref END) AS last_cv_event_ref
-      ,MAX(CASE WHEN e.type IN('Q31', 'Q32', 'Q33', 'Q34', 'Q35', 'Q36')
-           THEN e.event_ref END) AS last_interview_event_ref
-      ,MAX(CASE WHEN e.type IN('F', 'H')
-           THEN e.event_ref END) AS last_offer_event_ref
-      ,MAX(CASE WHEN e.type IN('F', 'H') AND e.outcome = 'F1'
-           THEN e.event_ref END) AS last_rejected_offer_event_ref
-      ,MAX(CASE WHEN e.type IN('KE03', 'Q21', 'Q31', 'Q32', 'Q33', 'Q34', 'Q35', 'Q36')
-                           AND e.outcome = 'A4'
-           THEN e.event_ref END) AS last_rejected_event_ref
-    INTO #shortlist_dates
-    FROM event e
-      INNER JOIN event_role can ON e.event_ref = can.event_ref
-    WHERE e.type IN('A', 'F', 'H', 'KE03', 'Q21', 'Q31', 'Q32', 'Q33', 'Q34', 'Q35', 'Q36')
-      AND can.type IN('A','1', 'D', 'F', 'H', 'K')
-      AND can.person_ref IN(SELECT candidate_id FROM #p7m_candidates)
-      AND (e.opportunity_ref IN(SELECT job_id FROM #p7m_contract_jobs) OR
-           e.opportunity_ref IN(SELECT job_id FROM #p7m_perm_jobs))
-    GROUP BY
-      e.opportunity_ref
-      ,can.person_ref;
+      CAST(NULL AS INT) AS [id]
+      ,assignment_id AS [assignment]
+      ,job_id AS [job]
+      ,candidate_id  AS [candidate]
+    FROM #contr_assign_temp;
 
-    CREATE UNIQUE INDEX shortlist_dates_idx ON #shortlist_dates (opportunity_ref, person_ref);
-
-    SELECT
-      MIN(e.event_ref) AS [shortlist_id]
-      ,e.opportunity_ref AS job_id
-      ,can.person_ref AS candidate_id
-      ,MIN(e.create_timestamp) AS [createddate]
-      ,MIN(e.create_user) AS [created_by]
-      ,MIN(e.event_date) AS [date_short]
-      ,MIN(e.event_time) AS [time_short]
-      ,MAX(CASE WHEN e.event_ref = last_event_ref
-                THEN CASE WHEN e.type IN('F', 'H') AND e.outcome = 'F3'
-                            THEN 'Offer Accepted'
-                          WHEN e.type IN('F', 'H') AND e.outcome = 'F1'
-                            THEN 'Offer Rejected'
-                          WHEN e.type IN('KE03', 'Q21', 'Q31', 'Q32', 'Q33', 'Q34', 'Q35', 'Q36')
-                           AND e.outcome = 'A4'
-                            THEN 'Rejected'
-                          WHEN e.type IN('A')
-                            THEN 'Shortlisted'
-                          WHEN e.type IN('F', 'H')
-                            THEN 'Under Offer'
-                          WHEN e.type IN('KE03', 'Q21')
-                            THEN 'CV Sent'
-                          WHEN e.type IN('Q31', 'Q32', 'Q33', 'Q34', 'Q35', 'Q36')
-                            THEN 'Interview Arranged'
-                          END
-                END) AS [status]
-      ,MIN(CASE e.event_ref WHEN last_cv_event_ref THEN e.event_date END) AS [last_cv_dt]
-      ,MIN(CASE e.event_ref WHEN last_cv_event_ref THEN e.event_time END) AS [last_cv_tm]
-      ,MIN(CASE e.event_ref WHEN last_interview_event_ref THEN e.event_date END) AS [last_iv_dt]
-      ,MIN(CASE e.event_ref WHEN last_interview_event_ref THEN e.event_time END) AS [last_iv_tm]
-      ,MIN(CASE e.event_ref WHEN last_cv_event_ref THEN e.create_user END) AS [last_cv_by]
-      ,MIN(CASE e.event_ref WHEN last_interview_event_ref THEN e.create_user END) AS [last_iv_by]
-      ,MIN(CASE e.event_ref WHEN last_offer_event_ref THEN e.event_date END) AS [last_of_dt]
-      ,MIN(CASE e.event_ref WHEN last_offer_event_ref
-                            THEN CAST(update_timestamp AS TIME) END) AS [last_of_tm]
-      ,MIN(CASE e.event_ref WHEN last_offer_event_ref THEN e.create_user END) AS [last_of_by]
-      ,MAX(pla.income) AS [offer_sal]
-      ,MIN(CASE e.event_ref WHEN last_rejected_offer_event_ref THEN e.outcome_date END) AS [rej_of_dt]
-      ,MIN(CASE e.event_ref WHEN last_rejected_offer_event_ref
-                            THEN CAST(update_timestamp AS TIME) END) AS [rej_of_tm]
-      ,MIN(CASE e.event_ref WHEN last_rejected_offer_event_ref THEN e.create_user END) AS [rej_of_by]
-      ,MIN(CASE e.event_ref WHEN last_rejected_event_ref THEN e.outcome_date END) AS [rej_dt]
-      ,MIN(CASE e.event_ref WHEN last_rejected_event_ref
-                            THEN CAST(update_timestamp AS TIME) END) AS [rej_tm]
-      ,MIN(CASE e.event_ref WHEN last_rejected_event_ref THEN e.create_user END) AS [rej_by]
-      ,MIN(CASE e.event_ref WHEN last_interview_event_ref THEN e.type END) AS [last_iv_st]
-      ,MAX(CASE WHEN e.event_ref = last_event_ref
-                 AND e.type IN('KE03', 'Q21', 'Q31', 'Q32', 'Q33', 'Q34', 'Q35', 'Q36')
-                 AND e.outcome = 'A4'
-                THEN 'Agency' END) AS [rejected_by]
-      ,MAX(CASE WHEN e.event_ref = last_event_ref
-                 AND e.type IN('KE03', 'Q21', 'Q31', 'Q32', 'Q33', 'Q34', 'Q35', 'Q36')
-                 AND e.outcome = 'A4'
-                THEN 'Would Consider for Future' END) AS [rejected_res]
-      ,MAX(CASE WHEN e.event_ref = last_event_ref
-                THEN CASE WHEN e.type IN('F', 'H') AND e.outcome = 'F3'
-                          THEN 'F3'
-                          ELSE e.type
-                          END
-                END) AS [progress]
-    INTO #p7m_shortlist
-    FROM event e
-      INNER JOIN event_role can ON e.event_ref = can.event_ref
-      LEFT OUTER JOIN placing pla ON e.event_ref = pla.event_ref
-      INNER JOIN #shortlist_dates fle ON e.opportunity_ref = fle.opportunity_ref
-                                     AND can.person_ref = fle.person_ref
-    WHERE e.type IN('A', 'F', 'H', 'KE03', 'Q21', 'Q31', 'Q32', 'Q33', 'Q34', 'Q35', 'Q36')
-      AND can.type IN('A1', 'D', 'F', 'H', 'K')
-    GROUP BY
-      e.opportunity_ref
-      ,can.person_ref;
-
-    CREATE UNIQUE INDEX p7m_shortlist_idx
-                     ON #p7m_shortlist (shortlist_id, candidate_id, job_id);
-
-----------------------------------------------------------------------------
-
--- Load data for X_SHORT_CAND.CSV
-
-    CALL logger('Load X_SHORT_CAND', log_file_path);
-
-    SELECT
-      IDENTITY(10) AS [id]
-      ,shortlist_id AS [shortlist]
-      ,opportunity_ref AS [job]
-      ,can_ref AS [candidate]
-      ,con_ref AS [contact]
-      ,organisation_ref AS [client]
-    INTO #p7m_x_short_cand
-    FROM
-      (SELECT DISTINCT
-         sl.shortlist_id
-         ,e.opportunity_ref
-         ,can.person_ref AS can_ref
-         ,con.person_ref AS con_ref
-         ,e.organisation_ref
-       FROM event e
-         INNER JOIN event_role can ON e.event_ref = can.event_ref
-         INNER JOIN event_role con ON e.event_ref = con.event_ref
-         INNER JOIN #p7m_shortlist sl ON e.opportunity_ref = sl.job_id
-                                     AND can.person_ref = sl.candidate_id
-       WHERE e.type IN('A', 'F', 'H', 'KE03', 'Q21', 'Q31', 'Q32', 'Q33', 'Q34', 'Q35', 'Q36')
-         AND can.type IN('A1', 'D', 'F', 'H', 'K')
-         AND con.type IN('C1')) a;
+    UPDATE #p7m_x_assig_cand
+    SET id = IDENTITY(10);
 
 ----------------------------------------------------------------------------
 
@@ -1636,7 +1583,8 @@ journal_client_visit_type=P14
                   WHERE con.position_ref = contact_id)
       AND EXISTS (SELECT 1
                   FROM #p7m_candidates
-                  WHERE er_can.person_ref = candidate_id);
+                  WHERE er_can.person_ref = candidate_id)
+    ;
 
     CREATE UNIQUE INDEX p7m_interviews_idx
                      ON #p7m_interviews (interview_id, candidate_id, job_id);
@@ -1914,7 +1862,7 @@ journal_client_visit_type=P14
         FROM #p7m_meta
         UNION ALL
         SELECT
-          'UNLOAD SELECT ''"'
+          'UNLOAD SELECT TOP 2000 ''"'
           || zip_exe_path
           || '" a -tzip "'
           || csv_file_path

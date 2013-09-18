@@ -317,27 +317,26 @@ journal_client_visit_type=P14
 
     CALL logger('Load X_CLIENT_CON', log_file_path);
 
-    SELECT DISTINCT TOP 20
+    SELECT DISTINCT
       organisation_ref
     INTO #client_list
     FROM opportunity
-    WHERE responsible_team IN(SELECT [value]
-                              FROM #p7m_vars WHERE [key] = 'teams');
+    ;
 
-    BEGIN
-      DECLARE i INT;
-      SET i = 0;
-      WHILE (i < 6) LOOP
-
-        INSERT INTO #client_list
-        SELECT parent_organ_ref
-        FROM organisation org
-          INNER JOIN #client_list cl ON org.organisation_ref = cl.organisation_ref
-        WHERE parent_organ_ref NOT IN(SELECT organisation_ref FROM #client_list);
-
-        SET i = i + 1;
-      END LOOP;
-    END;
+--    BEGIN
+--      DECLARE i INT;
+--      SET i = 0;
+--      WHILE (i < 6) LOOP
+--
+--        INSERT INTO #client_list
+--        SELECT parent_organ_ref
+--        FROM organisation org
+--          INNER JOIN #client_list cl ON org.organisation_ref = cl.organisation_ref
+--        WHERE parent_organ_ref NOT IN(SELECT organisation_ref FROM #client_list);
+--
+--        SET i = i + 1;
+--      END LOOP;
+--    END;
 
     CREATE UNIQUE INDEX p7m_client_list_idx ON #client_list (organisation_ref);
 
@@ -352,13 +351,6 @@ journal_client_visit_type=P14
                                 FROM #p7m_vars WHERE [key] = 'contact_contact_status_code')
       AND pos.record_status IN(SELECT [value]
                                FROM #p7m_vars WHERE [key] = 'contact_record_status_code')
-      AND EXISTS (SELECT 1
-                  FROM opport_role r
-                    INNER JOIN opportunity o2 ON r.opportunity_ref = o2.opportunity_ref
-                  WHERE r.position_ref = pos.position_ref
---                    AND o2.responsible_team IN(SELECT [value]
---                                               FROM #p7m_vars WHERE [key] = 'teams')
-                    AND r.role_type IN('C1'))
     ;
 
     CREATE UNIQUE INDEX p7m_x_client_con_idx ON #p7m_x_client_con (client, contact);
@@ -587,7 +579,7 @@ journal_client_visit_type=P14
 
     CALL logger('Load CONTRACT_JOBS', log_file_path);
 
-    SELECT TOP 20
+    SELECT
       opp.opportunity_ref AS [job_id]
       ,LEFT(opp.create_timestamp, 10) AS [createddate]
       ,opp.create_user AS [created_by]
@@ -625,7 +617,7 @@ journal_client_visit_type=P14
       LEFT OUTER JOIN address a ON opp.address_ref = a.address_ref
       LEFT OUTER JOIN temporary_vac tv ON opp.opportunity_ref = tv.opportunity_ref
     WHERE opp.type IN(SELECT [value] FROM #p7m_vars WHERE [key] = 'job_contract_type')
-       AND opp.responsible_team IN(SELECT [value] FROM #p7m_vars WHERE [key] = 'teams');
+     ;
 
     CREATE UNIQUE INDEX p7m_contract_jobs_idx ON #p7m_contract_jobs (job_id);
 
@@ -726,7 +718,7 @@ journal_client_visit_type=P14
 
     CALL logger('Load PERM_JOBS', log_file_path);
 
-    SELECT TOP 20
+    SELECT
       opp.opportunity_ref AS [job_id]
       ,LEFT(opp.create_timestamp, 10) AS [createddate]
       ,opp.create_user AS [created_by]
@@ -765,8 +757,7 @@ journal_client_visit_type=P14
       LEFT OUTER JOIN permanent_vac pv ON opp.opportunity_ref = pv.opportunity_ref
     WHERE opp.type IN(SELECT [value]
                       FROM #p7m_vars WHERE [key] = 'job_perm_type')
-      AND opp.responsible_team IN(SELECT [value]
-                                  FROM #p7m_vars WHERE [key] = 'teams');
+     ;
 
     CREATE UNIQUE INDEX p7m_perm_jobs_idx ON #p7m_perm_jobs (job_id);
 
@@ -868,7 +859,7 @@ journal_client_visit_type=P14
 
     CALL logger('Load CANDIDATES', log_file_path);
 
-    SELECT TOP 20
+    SELECT
       per.person_ref AS [candidate_id]
       ,per.create_timestamp AS [createddate]
       ,per.create_user AS [created_by]
@@ -950,6 +941,8 @@ journal_client_visit_type=P14
                                                          END), MAX(create_timestamp))
                                   FROM address a1
                                   WHERE a.person_ref = a1.person_ref)
+        AND a.main_address = 'Y'
+        AND a.type = 'HOME'
       LEFT OUTER JOIN position pos ON per.person_ref = pos.person_ref
         AND pos.position_ref
           = (SELECT
@@ -963,19 +956,6 @@ journal_client_visit_type=P14
                   FROM person_type pts
                   WHERE pts.type IN('A', 'C')
                     AND per.person_ref = pts.person_ref)
-      AND EXISTS (SELECT 1
-                  FROM event_role er
-                    INNER JOIN event e ON er.event_ref = e.event_ref
-                  WHERE e.type IN('F', 'H')
-                    AND er.type IN('F', 'H')
-                    AND e.create_timestamp > DATEADD(MONTH, -24, GETDATE())
-                    AND person_ref IS NOT NULL
-                    AND EXISTS (SELECT 1
-                                FROM event_role ru
-                                WHERE ru.team IN(SELECT [value]
-                                                 FROM #p7m_vars WHERE [key] = 'teams')
-                                  AND ru.event_ref = er.event_ref)
-                    AND per.person_ref = er.person_ref)
     ;
 
     CREATE UNIQUE INDEX p7m_candidates_idx ON #p7m_candidates (candidate_id);
@@ -1117,7 +1097,7 @@ journal_client_visit_type=P14
 
     CALL logger('Load CANDIDATE_PREV_ASSIGN', log_file_path);
 
-    SELECT TOP 20
+    SELECT
       pos.position_ref AS [prev_assign_id]
       ,pos.person_ref AS [candidate_id]
       ,pos.create_timestamp AS [createddate]
@@ -1911,7 +1891,7 @@ journal_client_visit_type=P14
         FROM #p7m_meta
         UNION ALL
         SELECT
-          'UNLOAD SELECT ''"'
+          'UNLOAD SELECT TOP 2000 ''"'
           || zip_exe_path
           || '" a -tzip "'
           || csv_file_path
