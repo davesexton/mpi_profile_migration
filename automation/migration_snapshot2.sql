@@ -60,6 +60,10 @@ journal_client_visit_type=P14
       DROP PROCEDURE logger;
     END IF;
 
+    IF OBJECT_ID('write_csv') > 0 THEN
+      DROP PROCEDURE write_csv;
+    END IF;
+
     CREATE PROCEDURE logger (IN log_text VARCHAR(255), IN log_file_path VARCHAR(255))
     BEGIN
 
@@ -68,6 +72,30 @@ journal_client_visit_type=P14
       PRINT CAST(GETDATE() AS VARCHAR(23)) || ': ' || log_text;
 
     END;
+
+
+    CREATE PROCEDURE write_csv (IN table_name VARCHAR(255), IN csv_file_path VARCHAR(255))
+    BEGIN
+      DECLARE sql_text VARCHAR(4000);
+
+      SELECT
+        'UNLOAD SELECT ''"' || REPLACE(UPPER(cname), ',', '","') || '"'''
+        || ' UNION ALL SELECT ''"''||REPLACE(TRIM('
+        || REPLACE(cname, ',', '),''"'',''""'')||''","''||REPLACE(TRIM(')
+        || '),''"'',''""'')||''"'''
+        || ' FROM #p7m_'
+        || tname
+        || ' TO ''' || csv_file_path
+        || tname
+        || '.csv'' FORMAT ASCII QUOTES off ESCAPES off'
+      INTO sql_text
+      FROM #p7m_meta
+      WHERE tname = table_name;
+
+      EXECUTE (sql_text);
+
+    END;
+
 
 -- Create tables
 
@@ -355,6 +383,9 @@ journal_client_visit_type=P14
 
     CREATE UNIQUE INDEX p7m_x_client_con_idx ON #p7m_x_client_con (client, contact);
 
+    CALL write_csv('x_client_con', csv_file_path);
+
+
 ----------------------------------------------------------------------------
 
 -- Load data for CLIENTS.CSV
@@ -416,6 +447,8 @@ journal_client_visit_type=P14
                     AND [key] IN('client_location_code_type', 'client_industry_code_type')
                   GROUP BY
                     organisation_ref) co ON cl.client_id = co.organisation_ref;
+
+    CALL write_csv('clients', csv_file_path);
 
 ----------------------------------------------------------------------------
 
@@ -506,6 +539,8 @@ journal_client_visit_type=P14
     SET perm_consultant = contract_consultant
     FROM #p7m_contacts;
 
+    CALL write_csv('contacts', csv_file_path);
+
 ----------------------------------------------------------------------------
 
 -- Load data for CONTACT_INDUSTRY_SECTORS.CSV
@@ -521,6 +556,10 @@ journal_client_visit_type=P14
       INNER JOIN search_code ON contact_id = position_ref
     WHERE search_type = 4
       AND code_type IN(SELECT [value_int] FROM #p7m_vars WHERE [key] = 'contact_industry_code_type');
+
+    CALL write_csv('contact_industry_sectors', csv_file_path);
+
+    DROP TABLE #p7m_contact_industry_sectors;
 
 ----------------------------------------------------------------------------
 
@@ -539,6 +578,10 @@ journal_client_visit_type=P14
       AND code_type IN(SELECT [value_int]
                        FROM #p7m_vars WHERE [key] = 'contact_job_category_code_type');
 
+    CALL write_csv('contact_job_categories', csv_file_path);
+
+    DROP TABLE #p7m_contact_job_categories;
+
 ----------------------------------------------------------------------------
 
 -- Load data for CONTACT_SKILLS.CSV
@@ -556,6 +599,10 @@ journal_client_visit_type=P14
       AND code_type IN(SELECT [value_int]
                        FROM #p7m_vars WHERE [key] = 'contact_skill_code_type');
 
+    CALL write_csv('contact_skills', csv_file_path);
+
+    DROP TABLE #p7m_contact_skills;
+
 ----------------------------------------------------------------------------
 
 -- Load data for CONTACT_LOCATIONS.CSV
@@ -572,6 +619,10 @@ journal_client_visit_type=P14
      WHERE search_type = 4
       AND code_type IN(SELECT [value_int]
                        FROM #p7m_vars WHERE [key] = 'contact_location_code_type');
+
+    CALL write_csv('contact_locations', csv_file_path);
+
+    DROP TABLE #p7m_contact_locations;
 
 ----------------------------------------------------------------------------
 
@@ -605,6 +656,8 @@ journal_client_visit_type=P14
       ) a;
 
     CREATE UNIQUE INDEX p7m_x_client_job_idx ON #p7m_x_client_job (client, contact, job);
+
+    CALL write_csv('x_client_job', csv_file_path);
 
 ----------------------------------------------------------------------------
 
@@ -679,6 +732,8 @@ journal_client_visit_type=P14
                                 FROM #p7m_vars WHERE [key] = 'job_contact_fee_event_type')
                     AND j.job_id = e.opportunity_ref);
 
+    CALL write_csv('contract_jobs', csv_file_path);
+
 ----------------------------------------------------------------------------
 
 -- Load data for CONTRACT_JOB_INDUSTRY_SECTORS.CSV
@@ -695,6 +750,10 @@ journal_client_visit_type=P14
     WHERE search_type = 5
       AND code_type IN(SELECT [value_int]
                        FROM #p7m_vars WHERE [key] = 'job_industry_code_type');
+
+    CALL write_csv('contract_job_industry_sectors', csv_file_path);
+
+    DROP TABLE #p7m_contract_job_industry_sectors;
 
 ----------------------------------------------------------------------------
 
@@ -713,6 +772,10 @@ journal_client_visit_type=P14
       AND code_type IN(SELECT [value_int]
                        FROM #p7m_vars WHERE [key] = 'job_job_category_code_type');
 
+    CALL write_csv('contract_job_job_categories', csv_file_path);
+
+    DROP TABLE #p7m_contract_job_job_categories;
+
 ----------------------------------------------------------------------------
 
 -- Load data for CONTRACT_JOB_QUALIFICATIONS.CSV
@@ -730,6 +793,10 @@ journal_client_visit_type=P14
       AND code_type IN(SELECT [value_int]
                        FROM #p7m_vars WHERE [key] = 'job_qualification_code_type');
 
+    CALL write_csv('contract_job_qualifications', csv_file_path);
+
+    DROP TABLE #p7m_contract_job_qualifications;
+
 ----------------------------------------------------------------------------
 
 -- Load data for CONTRACT_JOB_SKILLS.CSV
@@ -746,6 +813,10 @@ journal_client_visit_type=P14
     WHERE search_type = 5
       AND code_type IN(SELECT [value_int]
                        FROM #p7m_vars WHERE [key] = 'job_skill_code_type');
+
+    CALL write_csv('contract_job_skills', csv_file_path);
+
+    DROP TABLE #p7m_contract_job_skills;
 
 ----------------------------------------------------------------------------
 
@@ -822,6 +893,8 @@ journal_client_visit_type=P14
                   WHERE type IN(SELECT [value] FROM #p7m_vars WHERE [key] = 'job_contact_fee_event_type')
                     AND j.job_id = e.opportunity_ref);
 
+    CALL write_csv('perm_jobs', csv_file_path);
+
 ----------------------------------------------------------------------------
 
 -- Load data for PERM_JOB_INDUSTRY_SECTORS.CSV
@@ -838,6 +911,10 @@ journal_client_visit_type=P14
     WHERE search_type = 5
       AND code_type IN(SELECT [value_int]
                        FROM #p7m_vars WHERE [key] = 'job_industry_code_type');
+
+    CALL write_csv('perm_job_industry_sectors', csv_file_path);
+
+    DROP TABLE #p7m_perm_job_industry_sectors;
 
 ----------------------------------------------------------------------------
 
@@ -856,6 +933,10 @@ journal_client_visit_type=P14
       AND code_type IN(SELECT [value_int]
                        FROM #p7m_vars WHERE [key] = 'job_job_category_code_type');
 
+    CALL write_csv('perm_job_job_categories', csv_file_path);
+
+    DROP TABLE #p7m_perm_job_job_categories;
+
 ----------------------------------------------------------------------------
 
 -- Load data for PERM_JOB_QUALIFICATIONS.CSV
@@ -873,6 +954,10 @@ journal_client_visit_type=P14
       AND code_type IN(SELECT [value_int]
                        FROM #p7m_vars WHERE [key] = 'job_qualification_code_type');
 
+    CALL write_csv('perm_job_qualifications', csv_file_path);
+
+    DROP TABLE #p7m_perm_job_qualifications;
+
 ----------------------------------------------------------------------------
 
 -- Load data for PERM_JOB_SKILLS.CSV
@@ -889,6 +974,10 @@ journal_client_visit_type=P14
     WHERE search_type = 5
       AND code_type IN(SELECT [value_int]
                        FROM #p7m_vars WHERE [key] = 'job_skill_code_type');
+
+    CALL write_csv('perm_job_skills', csv_file_path);
+
+    DROP TABLE #p7m_perm_job_skills;
 
 ----------------------------------------------------------------------------
 
@@ -933,7 +1022,9 @@ journal_client_visit_type=P14
       LEFT OUTER JOIN address a ON pos.address_ref = a.address_ref
     WHERE pos.organisation_ref IN(SELECT client_id FROM #p7m_clients);
 
-    CREATE UNIQUE INDEX candidate_prev_assign_idx ON #p7m_candidate_prev_assign (candidate_id);
+    CREATE INDEX candidate_prev_assign_idx ON #p7m_candidate_prev_assign (candidate_id);
+
+    CALL write_csv('candidate_prev_assign', csv_file_path);
 
 ----------------------------------------------------------------------------
 -- Load data for SHORTLIST.CSV
@@ -1027,8 +1118,20 @@ journal_client_visit_type=P14
                 THEN 'Would Consider for Future' END) AS [rejected_res]
       ,MAX(CASE WHEN e.event_ref = last_event_ref
                 THEN CASE WHEN e.type IN('F', 'H') AND e.outcome = 'F3'
-                          THEN 'F3'
-                          ELSE e.type
+                            THEN 'Offer Accepted'
+                          WHEN e.type IN('F', 'H') AND e.outcome = 'F1'
+                            THEN 'Offer Rejected'
+                          WHEN e.type IN('KE03', 'Q21', 'Q31', 'Q32', 'Q33', 'Q34', 'Q35', 'Q36')
+                           AND e.outcome = 'A4'
+                            THEN 'Rejected'
+                          WHEN e.type IN('A')
+                            THEN 'Shortlisted'
+                          WHEN e.type IN('F', 'H')
+                            THEN 'Under Offer'
+                          WHEN e.type IN('KE03', 'Q21')
+                            THEN 'CV Sent'
+                          WHEN e.type IN('Q31', 'Q32', 'Q33', 'Q34', 'Q35', 'Q36')
+                            THEN 'Interview Arranged'
                           END
                 END) AS [progress]
     INTO #p7m_shortlist
@@ -1050,6 +1153,8 @@ journal_client_visit_type=P14
     CREATE UNIQUE INDEX p7m_shortlist_idx
                      ON #p7m_shortlist (shortlist_id, candidate_id, job_id);
 
+    CALL write_csv('shortlist', csv_file_path);
+
 ----------------------------------------------------------------------------
 -- Load data for X_SHORT_CAND.CSV
 
@@ -1065,6 +1170,10 @@ journal_client_visit_type=P14
     INTO #p7m_x_short_cand
     FROM #p7m_shortlist sl
       INNER JOIN #p7m_contacts con ON sl.person_id = con.person_id;
+
+    CALL write_csv('x_short_cand', csv_file_path);
+
+    DROP TABLE #p7m_x_short_cand;
 
 ----------------------------------------------------------------------------
 
@@ -1213,6 +1322,8 @@ journal_client_visit_type=P14
     WHERE search_type = 1
       AND pt.type LIKE 'Z%';
 
+    CALL write_csv('candidates', csv_file_path);
+
 ----------------------------------------------------------------------------
 
 -- Load data for CANDIDATE_INDUSTRY_SECTORS.CSV
@@ -1228,6 +1339,10 @@ journal_client_visit_type=P14
       INNER JOIN search_code ON candidate_id = person_ref
     WHERE search_type = 1
       AND code_type IN(SELECT [value_int] FROM #p7m_vars WHERE [key] = 'candidate_industry_code_type');
+
+    CALL write_csv('candidate_industry_sectors', csv_file_path);
+
+    DROP TABLE #p7m_candidate_industry_sectors;
 
 ----------------------------------------------------------------------------
 
@@ -1246,6 +1361,10 @@ journal_client_visit_type=P14
       AND code_type IN(SELECT [value_int]
                        FROM #p7m_vars WHERE [key] = 'candidate_job_category_code_type');
 
+    CALL write_csv('candidate_job_categories', csv_file_path);
+
+    DROP TABLE #p7m_candidate_job_categories;
+
 ----------------------------------------------------------------------------
 
 -- Load data for CANDIDATE_LOCATIONS.CSV
@@ -1261,6 +1380,10 @@ journal_client_visit_type=P14
       INNER JOIN search_code ON candidate_id = person_ref
     WHERE search_type = 1
       AND code_type IN(SELECT [value_int] FROM #p7m_vars WHERE [key] = 'candidate_location_code_type');
+
+    CALL write_csv('candidate_locations', csv_file_path);
+
+    DROP TABLE #p7m_candidate_locations;
 
 ----------------------------------------------------------------------------
 
@@ -1290,6 +1413,10 @@ journal_client_visit_type=P14
         INNER JOIN person p ON c.candidate_id = p.person_ref
       WHERE p.date_of_birth IS NOT NULL) a ;
 
+    CALL write_csv('candidate_qualifications', csv_file_path);
+
+    DROP TABLE #p7m_candidate_qualifications;
+
 ----------------------------------------------------------------------------
 
 -- Load data for CANDIDATE_SKILLS.CSV
@@ -1306,6 +1433,10 @@ journal_client_visit_type=P14
     WHERE search_type = 1
       AND code_type IN(SELECT [value_int] FROM #p7m_vars WHERE [key] = 'candidate_skill_code_type');
 
+    CALL write_csv('candidate_skils', csv_file_path);
+
+    DROP TABLE #p7m_candidate_skils;
+
 ----------------------------------------------------------------------------
 
 -- Load data for X_PA_CLIENT.CSV
@@ -1321,6 +1452,10 @@ journal_client_visit_type=P14
     FROM #p7m_candidate_prev_assign
     WHERE prev_co_id IN(SELECT client_id FROM #p7m_clients);
 
+    CALL write_csv('x_pa_client', csv_file_path);
+
+    DROP TABLE #p7m_x_pa_client;
+
 ----------------------------------------------------------------------------
 
 -- Load data for X_PREV_ASSIG_CAND.CSV
@@ -1333,6 +1468,10 @@ journal_client_visit_type=P14
       ,candidate_id AS [candidate]
     INTO #p7m_x_prev_assig_cand
     FROM #p7m_candidate_prev_assign;
+
+    CALL write_csv('x_prev_assig_cand', csv_file_path);
+
+    DROP TABLE #p7m_x_prev_assig_cand;
 
 ----------------------------------------------------------------------------
 
@@ -1348,6 +1487,10 @@ journal_client_visit_type=P14
     FROM organisation
     WHERE parent_organ_ref IS NOT NULL
       AND organisation_ref IN(SELECT organisation_ref FROM #client_list);
+
+    CALL write_csv('x_client_sub', csv_file_path);
+
+    DROP TABLE #p7m_x_client_sub;
 
 ----------------------------------------------------------------------------
 
@@ -1414,6 +1557,10 @@ journal_client_visit_type=P14
       ,office AS [office]
     INTO #p7m_perm_assign
     FROM #perm_assign_temp;
+
+    CALL write_csv('perm_assign', csv_file_path);
+
+    DROP TABLE #p7m_perm_assign;
 
 -----------------------------------------------------------------------------
 
@@ -1497,6 +1644,10 @@ journal_client_visit_type=P14
     INTO #p7m_contr_assign
     FROM #contr_assign_temp;
 
+    CALL write_csv('contr_asign', csv_file_path);
+
+    DROP TABLE #p7m_contr_asign;
+
 ---------------------------------------------------------------------------
 
 -- Load data for X_ASSIG_CAND.CSV
@@ -1521,6 +1672,12 @@ journal_client_visit_type=P14
 
     UPDATE #p7m_x_assig_cand
     SET id = IDENTITY(10);
+
+    CALL write_csv('x_assig_cand', csv_file_path);
+
+    DROP TABLE #p7m_x_assig_cand;
+    DROP TABLE #p7m_perm_assign_temp;
+    DROP TABLE #p7m_contr_asign_temp;
 
 ----------------------------------------------------------------------------
 
@@ -1593,6 +1750,8 @@ journal_client_visit_type=P14
     SET iv_att = 'Y'
     WHERE interview_id IN(SELECT last_interview_event_ref FROM #shortlist_dates);
 
+    CALL write_csv('interviews', csv_file_path);
+
 ----------------------------------------------------------------------------
 
 -- Load data for X_SHORT_IV.CSV
@@ -1607,6 +1766,12 @@ journal_client_visit_type=P14
     FROM #p7m_interviews iv
       INNER JOIN #p7m_shortlist sl ON iv.candidate_id = sl.candidate_id
                                   AND iv.job_id = sl.job_id;
+
+    CALL write_csv('x_short_iv', csv_file_path);
+
+    DROP TABLE #p7m_x_short_iv;
+    DROP TABLE #p7m_interviews;
+    DROP TABLE #p7m_shortlist;
 
 ----------------------------------------------------------------------------
 
@@ -1736,6 +1901,10 @@ journal_client_visit_type=P14
     FROM #journals
     WHERE journal_type = 'journal_send_email_type';
 
+    CALL write_csv('send_email_journals', csv_file_path);
+
+    DROP TABLE #p7m_send_email_journals;
+
     CALL logger('Load CALL_MADE_LOG_JOURNALS',log_file_path);
 
     SELECT
@@ -1750,6 +1919,10 @@ journal_client_visit_type=P14
     INTO #p7m_call_made_log_journals
     FROM #journals
     WHERE journal_type = 'journal_call_made_log_type';
+
+    CALL write_csv('call_made_log_journals', csv_file_path);
+
+    DROP TABLE #p7m_call_made_log_journals;
 
     CALL logger('Load CLIENT_VISIT_ATTENDED_JOURNALS',log_file_path);
 
@@ -1767,6 +1940,10 @@ journal_client_visit_type=P14
     WHERE journal_type = 'journal_client_visit_type'
       AND outcome IS NOT NULL;
 
+    CALL write_csv('client_visit_attended_journals', csv_file_path);
+
+    DROP TABLE #p7m_client_visit_attended_journals;
+
     CALL logger('Load CLIENT_VISIT_ARRANGED_JOURNALS',log_file_path);
 
     SELECT
@@ -1781,6 +1958,10 @@ journal_client_visit_type=P14
     INTO #p7m_client_visit_arranged_journals
     FROM #journals
     WHERE journal_type = 'journal_client_visit_type';
+
+    CALL write_csv('client_visit_arranged_journals', csv_file_path);
+
+    DROP TABLE #p7m_client_visit_arranged_journals;
 
 ----------------------------------------------------------------------------
 
@@ -1837,66 +2018,70 @@ journal_client_visit_type=P14
                   FROM #p7m_candidates
                   WHERE l.parent_object_ref = candidate_id);
 
+    CALL write_csv('documents', csv_file_path);
+
+    DROP TABLE #p7m_documents;
+
 ----------------------------------------------------------------------------
 
 -- Output CSV files
 
-    CALL logger('Output CSV files', log_file_path);
-
-    BEGIN
-
-      DECLARE v_csv VARCHAR(8000);
-
-      DECLARE c_csv CURSOR FOR
-
-         SELECT
-          'UNLOAD SELECT ''"' || REPLACE(UPPER(cname), ',', '","') || '"'''
-          || ' UNION ALL SELECT ''"''||REPLACE(TRIM('
-          || REPLACE(cname, ',', '),''"'',''""'')||''","''||REPLACE(TRIM(')
-          || '),''"'',''""'')||''"'''
-          || ' FROM #p7m_'
-          || tname
-          || ' TO ''' || csv_file_path
-          || tname
-          || '.csv'' FORMAT ASCII QUOTES off ESCAPES off'
-        FROM #p7m_meta
-        UNION ALL
-        SELECT
-          'UNLOAD SELECT TOP 2000 ''"'
-          || zip_exe_path
-          || '" a -tzip "'
-          || csv_file_path
-          || 'documents.zip" "'' || document_path || ''"'' '
-          || ' FROM #p7m_documents'
-          || ' TO ''' || csv_file_path
-          || 'documents.bat'' '
-          || ' FORMAT ASCII QUOTES off ESCAPES off';
-
-      OPEN c_csv;
-
-      FETCH c_csv INTO v_csv;
-
-      WHILE SQLCODE = 0 LOOP
-
-        EXECUTE (v_csv);
-
-        FETCH c_csv INTO v_csv;
-
-      END LOOP;
-
-      CLOSE c_csv;
-
-      DEALLOCATE c_csv;
-
-    END;
+--    CALL logger('Output CSV files', log_file_path);
+--
+--    BEGIN
+--
+--      DECLARE v_csv VARCHAR(8000);
+--
+--      DECLARE c_csv CURSOR FOR
+--
+--         SELECT
+--          'UNLOAD SELECT ''"' || REPLACE(UPPER(cname), ',', '","') || '"'''
+--          || ' UNION ALL SELECT ''"''||REPLACE(TRIM('
+--          || REPLACE(cname, ',', '),''"'',''""'')||''","''||REPLACE(TRIM(')
+--          || '),''"'',''""'')||''"'''
+--          || ' FROM #p7m_'
+--          || tname
+--          || ' TO ''' || csv_file_path
+--          || tname
+--          || '.csv'' FORMAT ASCII QUOTES off ESCAPES off'
+--        FROM #p7m_meta
+--        UNION ALL
+--        SELECT
+--          'UNLOAD SELECT TOP 2000 ''"'
+--          || zip_exe_path
+--          || '" a -tzip "'
+--          || csv_file_path
+--          || 'documents.zip" "'' || document_path || ''"'' '
+--          || ' FROM #p7m_documents'
+--          || ' TO ''' || csv_file_path
+--          || 'documents.bat'' '
+--          || ' FORMAT ASCII QUOTES off ESCAPES off';
+--
+--      OPEN c_csv;
+--
+--      FETCH c_csv INTO v_csv;
+--
+--      WHILE SQLCODE = 0 LOOP
+--
+--        EXECUTE (v_csv);
+--
+--        FETCH c_csv INTO v_csv;
+--
+--      END LOOP;
+--
+--      CLOSE c_csv;
+--
+--      DEALLOCATE c_csv;
+--
+--    END;
 
 ----------------------------------------------------------------------------
 
 -- Create Documents Zip
 
-    CALL logger('Create ZIP file', log_file_path);
+--    CALL logger('Create ZIP file', log_file_path);
 
-    EXECUTE ('xp_cmdshell ''"' || csv_file_path || 'documents.bat" ''');
+--    EXECUTE ('xp_cmdshell ''"' || csv_file_path || 'documents.bat" ''');
 
 ----------------------------------------------------------------------------
 
@@ -1906,6 +2091,10 @@ journal_client_visit_type=P14
 
     IF OBJECT_ID('logger') > 0 THEN
       DROP PROCEDURE logger;
+    END IF;
+
+    IF OBJECT_ID('write_csv') > 0 THEN
+      DROP PROCEDURE write_csv;
     END IF;
 
   END;
