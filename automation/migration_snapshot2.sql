@@ -340,7 +340,6 @@ journal_client_visit_type=P14
       'document_ext,document_description');
 
 ----------------------------------------------------------------------------
-
 -- Load data for X_CLIENT_CON.CSV
 
     CALL logger('Load X_CLIENT_CON', log_file_path);
@@ -387,7 +386,6 @@ journal_client_visit_type=P14
 
 
 ----------------------------------------------------------------------------
-
 -- Load data for CLIENTS.CSV
 
     CALL logger('Load CLIENTS', log_file_path);
@@ -451,7 +449,6 @@ journal_client_visit_type=P14
     CALL write_csv('clients', csv_file_path);
 
 ----------------------------------------------------------------------------
-
 -- Load data for CONTACTS.CSV
 
     CALL logger('Load CONTACTS', log_file_path);
@@ -542,7 +539,6 @@ journal_client_visit_type=P14
     CALL write_csv('contacts', csv_file_path);
 
 ----------------------------------------------------------------------------
-
 -- Load data for CONTACT_INDUSTRY_SECTORS.CSV
 
     CALL logger('Load CONTACT_INDUSTRY_SECTORS', log_file_path);
@@ -562,7 +558,6 @@ journal_client_visit_type=P14
     DROP TABLE #p7m_contact_industry_sectors;
 
 ----------------------------------------------------------------------------
-
 -- Load data for CONTACT_JOB_CATEGORIES.CSV
 
     CALL logger('Load CONTACT_JOB_CATEGORIES', log_file_path);
@@ -583,7 +578,6 @@ journal_client_visit_type=P14
     DROP TABLE #p7m_contact_job_categories;
 
 ----------------------------------------------------------------------------
-
 -- Load data for CONTACT_SKILLS.CSV
 
     CALL logger('Load CONTACT_SKILLS', log_file_path);
@@ -604,7 +598,6 @@ journal_client_visit_type=P14
     DROP TABLE #p7m_contact_skills;
 
 ----------------------------------------------------------------------------
-
 -- Load data for CONTACT_LOCATIONS.CSV
 
     CALL logger('Load CONTACT_LOCATIONS', log_file_path);
@@ -625,7 +618,6 @@ journal_client_visit_type=P14
     DROP TABLE #p7m_contact_locations;
 
 ----------------------------------------------------------------------------
-
 -- Load data for X_CLIENT_JOB.CSV
 
     CALL logger('Load X_CLIENT_JOB', log_file_path);
@@ -660,7 +652,6 @@ journal_client_visit_type=P14
     CALL write_csv('x_client_job', csv_file_path);
 
 ----------------------------------------------------------------------------
-
 -- Load data for CONTRACT_JOBS.CSV
 
     CALL logger('Load CONTRACT_JOBS', log_file_path);
@@ -735,7 +726,6 @@ journal_client_visit_type=P14
     CALL write_csv('contract_jobs', csv_file_path);
 
 ----------------------------------------------------------------------------
-
 -- Load data for CONTRACT_JOB_INDUSTRY_SECTORS.CSV
 
     CALL logger('Load CONTRACT_JOB_INDUSTRY_SECTORS', log_file_path);
@@ -756,7 +746,6 @@ journal_client_visit_type=P14
     DROP TABLE #p7m_contract_job_industry_sectors;
 
 ----------------------------------------------------------------------------
-
 -- Load data for CONTRACT_JOB_JOB_CATEGORIES.CSV
 
     CALL logger('Load CONTRACT_JOB_JOB_CATEGORIES', log_file_path);
@@ -777,7 +766,6 @@ journal_client_visit_type=P14
     DROP TABLE #p7m_contract_job_job_categories;
 
 ----------------------------------------------------------------------------
-
 -- Load data for CONTRACT_JOB_QUALIFICATIONS.CSV
 
     CALL logger('Load CONTRACT_JOB_QUALIFICATIONS', log_file_path);
@@ -798,7 +786,6 @@ journal_client_visit_type=P14
     DROP TABLE #p7m_contract_job_qualifications;
 
 ----------------------------------------------------------------------------
-
 -- Load data for CONTRACT_JOB_SKILLS.CSV
 
     CALL logger('Load CONTRACT_JOB_SKILLS', log_file_path);
@@ -819,7 +806,6 @@ journal_client_visit_type=P14
     DROP TABLE #p7m_contract_job_skills;
 
 ----------------------------------------------------------------------------
-
 -- Load data for PERM_JOBS.CSV
 
     CALL logger('Load PERM_JOBS', log_file_path);
@@ -896,7 +882,6 @@ journal_client_visit_type=P14
     CALL write_csv('perm_jobs', csv_file_path);
 
 ----------------------------------------------------------------------------
-
 -- Load data for PERM_JOB_INDUSTRY_SECTORS.CSV
 
     CALL logger('Load PERM_JOB_INDUSTRY_SECTORS', log_file_path);
@@ -917,7 +902,6 @@ journal_client_visit_type=P14
     DROP TABLE #p7m_perm_job_industry_sectors;
 
 ----------------------------------------------------------------------------
-
 -- Load data for PERM_JOB_JOB_CATEGORIES.CSV
 
     CALL logger('Load PERM_JOB_JOB_CATEGORIES', log_file_path);
@@ -938,7 +922,6 @@ journal_client_visit_type=P14
     DROP TABLE #p7m_perm_job_job_categories;
 
 ----------------------------------------------------------------------------
-
 -- Load data for PERM_JOB_QUALIFICATIONS.CSV
 
     CALL logger('Load PERM_JOB_QUALIFICATIONS', log_file_path);
@@ -959,7 +942,6 @@ journal_client_visit_type=P14
     DROP TABLE #p7m_perm_job_qualifications;
 
 ----------------------------------------------------------------------------
-
 -- Load data for PERM_JOB_SKILLS.CSV
 
     CALL logger('Load PERM_JOB_SKILLS', log_file_path);
@@ -980,7 +962,6 @@ journal_client_visit_type=P14
     DROP TABLE #p7m_perm_job_skills;
 
 ----------------------------------------------------------------------------
-
 -- Load data for CANDIDATE_PREV_ASSIGN.CSV
 
     CALL logger('Load CANDIDATE_PREV_ASSIGN', log_file_path);
@@ -1176,7 +1157,6 @@ journal_client_visit_type=P14
     DROP TABLE #p7m_x_short_cand;
 
 ----------------------------------------------------------------------------
-
 -- Load data for CANDIDATES.CSV
 
     CALL logger('Load CANDIDATES', log_file_path);
@@ -1325,7 +1305,6 @@ journal_client_visit_type=P14
     CALL write_csv('candidates', csv_file_path);
 
 ----------------------------------------------------------------------------
-
 -- Load data for CANDIDATE_INDUSTRY_SECTORS.CSV
 
     CALL logger('Load CANDIDATE_INDUSTRY_SECTORS', log_file_path);
@@ -1345,7 +1324,6 @@ journal_client_visit_type=P14
     DROP TABLE #p7m_candidate_industry_sectors;
 
 ----------------------------------------------------------------------------
-
 -- Load data for CANDIDATE_JOB_CATEGORIES.CSV
 
     CALL logger('Load CANDIDATE_JOB_CATEGORIES', log_file_path);
@@ -1366,7 +1344,6 @@ journal_client_visit_type=P14
     DROP TABLE #p7m_candidate_job_categories;
 
 ----------------------------------------------------------------------------
-
 -- Load data for CANDIDATE_LOCATIONS.CSV
 
     CALL logger('Load CANDIDATE_LOCATIONS', log_file_path);
@@ -1386,39 +1363,38 @@ journal_client_visit_type=P14
     DROP TABLE #p7m_candidate_locations;
 
 ----------------------------------------------------------------------------
-
 -- Load data for CANDIDATE_QUALIFICATIONS.CSV
 
     CALL logger('Load CANDIDATE_QUALIFICATIONS', log_file_path);
 
     SELECT
-      IDENTITY(10) AS [id]
+      CAST(NULL AS INT) AS [id]
       ,candidate_id AS [candidate_id]
       ,code AS [qual]
     INTO #p7m_candidate_qualifications
-    FROM
-      (SELECT
-        candidate_id
-        ,code
-      FROM #p7m_candidates
-        INNER JOIN search_code ON candidate_id = person_ref
-      WHERE search_type = 1
-        AND code_type IN(SELECT [value_int]
-                         FROM #p7m_vars WHERE [key] = 'candidate_qualification_code_type')
-      UNION
-      SELECT
-        c.candidate_id
-        ,CAST(YEAR(p.date_of_birth) AS VARCHAR)
-      FROM #p7m_candidates c
-        INNER JOIN person p ON c.candidate_id = p.person_ref
-      WHERE p.date_of_birth IS NOT NULL) a ;
+    FROM #p7m_candidates
+      INNER JOIN search_code ON candidate_id = person_ref
+    WHERE search_type = 1
+      AND code_type IN(SELECT [value_int]
+                       FROM #p7m_vars WHERE [key] = 'candidate_qualification_code_type');
+
+    INSERT INTO #p7m_candidate_qualifications
+    SELECT
+      CAST(NULL AS INT) AS [id]
+      ,c.candidate_id
+      ,CAST(YEAR(p.date_of_birth) AS VARCHAR)
+    FROM #p7m_candidates c
+      INNER JOIN person p ON c.candidate_id = p.person_ref
+    WHERE p.date_of_birth IS NOT NULL;
+
+    UPDATE #p7m_candidate_qualifications
+    SET id = IDENTITY(10);
 
     CALL write_csv('candidate_qualifications', csv_file_path);
 
     DROP TABLE #p7m_candidate_qualifications;
 
 ----------------------------------------------------------------------------
-
 -- Load data for CANDIDATE_SKILLS.CSV
 
     CALL logger('Load CANDIDATE_SKILLS', log_file_path);
@@ -1433,12 +1409,11 @@ journal_client_visit_type=P14
     WHERE search_type = 1
       AND code_type IN(SELECT [value_int] FROM #p7m_vars WHERE [key] = 'candidate_skill_code_type');
 
-    CALL write_csv('candidate_skils', csv_file_path);
+    CALL write_csv('candidate_skills', csv_file_path);
 
-    DROP TABLE #p7m_candidate_skils;
+    DROP TABLE #p7m_candidate_skills;
 
 ----------------------------------------------------------------------------
-
 -- Load data for X_PA_CLIENT.CSV
 
     CALL logger('Load X_PA_CLIENT', log_file_path);
@@ -1457,7 +1432,6 @@ journal_client_visit_type=P14
     DROP TABLE #p7m_x_pa_client;
 
 ----------------------------------------------------------------------------
-
 -- Load data for X_PREV_ASSIG_CAND.CSV
 
     CALL logger('Load X_PREV_ASSIG_CAND', log_file_path);
@@ -1474,7 +1448,6 @@ journal_client_visit_type=P14
     DROP TABLE #p7m_x_prev_assig_cand;
 
 ----------------------------------------------------------------------------
-
 -- Load data for X_CLIENT_SUB.CSV
 
     CALL logger('Load X_CLIENT_SUB', log_file_path);
@@ -1493,7 +1466,6 @@ journal_client_visit_type=P14
     DROP TABLE #p7m_x_client_sub;
 
 ----------------------------------------------------------------------------
-
 -- Load data for PERM_ASSIGN.CSV
 
     CALL logger('Load PERM_ASSIGN', log_file_path);
@@ -1563,7 +1535,6 @@ journal_client_visit_type=P14
     DROP TABLE #p7m_perm_assign;
 
 -----------------------------------------------------------------------------
-
 -- Load data for CONTR_ASSIGN.CSV
 
     CALL logger('Load CONTR_ASSIGN', log_file_path);
@@ -1649,7 +1620,6 @@ journal_client_visit_type=P14
     DROP TABLE #p7m_contr_asign;
 
 ---------------------------------------------------------------------------
-
 -- Load data for X_ASSIG_CAND.CSV
 
     CALL logger('Load X_ASSIG_CAND', log_file_path);
@@ -1671,7 +1641,7 @@ journal_client_visit_type=P14
     FROM #contr_assign_temp;
 
     UPDATE #p7m_x_assig_cand
-    SET id = IDENTITY(10);
+    SET [id] = IDENTITY(10);
 
     CALL write_csv('x_assig_cand', csv_file_path);
 
@@ -1680,7 +1650,6 @@ journal_client_visit_type=P14
     DROP TABLE #p7m_contr_asign_temp;
 
 ----------------------------------------------------------------------------
-
 -- Load data for INTERVIEWS.CSV
 
     CALL logger('Load INTERVIEWS', log_file_path);
@@ -1753,7 +1722,6 @@ journal_client_visit_type=P14
     CALL write_csv('interviews', csv_file_path);
 
 ----------------------------------------------------------------------------
-
 -- Load data for X_SHORT_IV.CSV
 
     CALL logger('Load X_SHORT_IV', log_file_path);
@@ -1774,7 +1742,6 @@ journal_client_visit_type=P14
     DROP TABLE #p7m_shortlist;
 
 ----------------------------------------------------------------------------
-
 -- Load data for JOURNALS
 
     CALL logger('Load GENERAL_JOURNALS',log_file_path);
@@ -2023,7 +1990,6 @@ journal_client_visit_type=P14
     DROP TABLE #p7m_documents;
 
 ----------------------------------------------------------------------------
-
 -- Output CSV files
 
 --    CALL logger('Output CSV files', log_file_path);
@@ -2076,7 +2042,6 @@ journal_client_visit_type=P14
 --    END;
 
 ----------------------------------------------------------------------------
-
 -- Create Documents Zip
 
 --    CALL logger('Create ZIP file', log_file_path);
@@ -2084,7 +2049,6 @@ journal_client_visit_type=P14
 --    EXECUTE ('xp_cmdshell ''"' || csv_file_path || 'documents.bat" ''');
 
 ----------------------------------------------------------------------------
-
 -- Clean up
 
     CALL logger('Migration completed', log_file_path);
