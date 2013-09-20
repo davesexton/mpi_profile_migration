@@ -763,8 +763,6 @@ journal_client_visit_type=P14
 
     CALL write_csv('contract_job_job_categories', csv_file_path);
 
-    DROP TABLE #p7m_contract_job_job_categories;
-
 ----------------------------------------------------------------------------
 -- Load data for CONTRACT_JOB_QUALIFICATIONS.CSV
 
@@ -1615,9 +1613,10 @@ journal_client_visit_type=P14
     INTO #p7m_contr_assign
     FROM #contr_assign_temp;
 
-    CALL write_csv('contr_asign', csv_file_path);
+    CALL write_csv('contr_assign', csv_file_path);
 
-    DROP TABLE #p7m_contr_asign;
+    DROP TABLE #p7m_contr_assign;
+    DROP TABLE #p7m_contract_job_job_categories;
 
 ---------------------------------------------------------------------------
 -- Load data for X_ASSIG_CAND.CSV
@@ -1646,8 +1645,8 @@ journal_client_visit_type=P14
     CALL write_csv('x_assig_cand', csv_file_path);
 
     DROP TABLE #p7m_x_assig_cand;
-    DROP TABLE #p7m_perm_assign_temp;
-    DROP TABLE #p7m_contr_asign_temp;
+    DROP TABLE #perm_assign_temp;
+    DROP TABLE #contr_assign_temp;
 
 ----------------------------------------------------------------------------
 -- Load data for INTERVIEWS.CSV
@@ -2044,9 +2043,19 @@ journal_client_visit_type=P14
 ----------------------------------------------------------------------------
 -- Create Documents Zip
 
---    CALL logger('Create ZIP file', log_file_path);
+    EXECUTE('UNLOAD SELECT TOP 2000 ''"'
+      || zip_exe_path
+      || '" a -tzip "'
+      || csv_file_path
+      || 'documents.zip" "'' || document_path || ''"'' '
+      || ' FROM #p7m_documents'
+      || ' TO ''' || csv_file_path
+      || 'documents.bat'' '
+      || ' FORMAT ASCII QUOTES off ESCAPES off');
 
---    EXECUTE ('xp_cmdshell ''"' || csv_file_path || 'documents.bat" ''');
+    CALL logger('Create ZIP file', log_file_path);
+
+    EXECUTE ('xp_cmdshell ''"' || csv_file_path || 'documents.bat" ''');
 
 ----------------------------------------------------------------------------
 -- Clean up
