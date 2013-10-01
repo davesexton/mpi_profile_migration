@@ -19,6 +19,7 @@ candidate_qualification_code_type=1025,1020
 candidate_skill_code_type=1007,1010,1011,1012,1014,1016,1017,1018,1055
 candidate_tracking_consultant_code_type=1055
 client_contact_role_type=C1
+client_employer_only_record_status_code=Y
 client_industry_code_type=1005
 client_location_code_type=1015
 contact_industry_code_type=1005
@@ -29,11 +30,14 @@ contact_skill_code_type=1007,1010,1011,1012,1014,1016,1017,1018,1055
 contact_tracking_consultant_code_type=1055
 contact_record_status_code=C
 contact_contact_status_code=2,3,6
+job_close_reason_type=X2,X3,X4
+job_comprtitor_type=X3
 job_contact_fee_event_type=1FA
 job_contract_type=E
 job_education_code_type=1020
 job_industry_code_type=1005
 job_job_category_code_type=1000
+job_lead_record_status_code=L1
 job_location_code_type=1015
 job_perm_type=C,CR
 job_qualification_code_type=1025,1020
@@ -164,54 +168,59 @@ journal_client_visit_type=P14
 
     EXECUTE ('xp_cmdshell ''del "' || log_file_path || '"''');
     EXECUTE ('xp_cmdshell ''del "' || csv_file_path || 'documents.zip"''');
+    EXECUTE ('xp_cmdshell ''del "' || csv_file_path || '*.csv"''');
 
     CALL logger('Start migration', log_file_path);
 
 -- Load meta data
 
     INSERT INTO #p7m_meta VALUES('clients',
-      'client_id,createddate,created_by,updateddate,updated_by,' ||
-      'street1,street2,locality,town,county,' ||
-      'post_code,country,name,status,web_add,' ||
-      'source,location,industry,fin_year,client_type,' ||
-      'contract_consultant,perm_consultant,office,' ||
+      'client_id,createddate,created_by,updateddate,updated_by,street1,street2,locality,' ||
+      'town,county,post_code,country,name,status,web_add,source,location,industry,' ||
+      'fin_year,client_type,perm_consultant,perm_team,contract_consultant,contract_team,office,' ||
       'work_telephone,fax_telephone,consultant_notes');
 
     INSERT INTO #p7m_meta VALUES('contacts',
-      'contact_id,person_id,createddate,created_by,updateddate,updated_by,' ||
-      'street1,street2,locality,town,county,' ||
-      'post_code,country,status,contact_role,e_shot,' ||
-      'work_email_add,perm_consultant,contract_consultant,office,title,' ||
-      'first_name,last_name,full_name,salutation,' ||
-      'job_title,work_tel_number,work_extention,fax_no,mobile_no,contact_notes');
+      'contact_id,person_id,createddate,created_by,updateddate,updated_by,street1,' ||
+      'street2,locality,town,county,post_code,country,status,contact_role,e_shot,' ||
+      'work_email_add,perm_consultant,perm_team,contract_consultant,contract_team,office' ||
+      ',title,first_name,last_name,full_name,salutation,job_title,work_tel_number,' ||
+      'work_extention,fax_no,mobile_no,contact_notes');
 
     INSERT INTO #p7m_meta VALUES('contract_jobs',
-      'job_id,createddate,created_by,updateddate,updated_by,' ||
-      'street1,street2,locality,town,county,' ||
-      'post_code,country,no_req,std_hours,pay_period,' ||
-      'chrg_rate,pay_rate,status,job_title,start_dt,' ||
-      'end_date,job_src,report_to,job_type,location_cd,' ||
-      'cons1,cons1_split,fixed_term,filled_dt,consultant,office,personal_attributes');
+      'job_id,createddate,created_by,updateddate,updated_by,street1,street2,locality,' ||
+      'town,county,post_code,country,no_req,std_hours,pay_period,fixed_term,chrg_rate,' ||
+      'pay_rate,status,job_title,start_dt,end_date,job_src,report_to,job_type,location_cd,' ||
+      'cons1,cons1_perc,close_reason,lead,competitor,filled_dt,consultant,team,office,' ||
+      'personal_attributes');
 
     INSERT INTO #p7m_meta VALUES('perm_jobs',
-      'job_id,createddate,created_by,updateddate,updated_by,' ||
-      'street1,street2,locality,town,county,' ||
-      'post_code,country,status,job_title,start_dt,' ||
-      'job_src,job_type,closed_dt,location_cd,cons1,cons1_split,' ||
-      'filled_dt,consultant,office,fee_perc,sal_from,' ||
-      'sal_to,fixed_term,open_since,educ_level,no_req,personal_attributes');
+      'job_id,createddate,created_by,updateddate,updated_by,street1,street2,locality,' ||
+      'town,county,post_code,country,status,job_title,start_dt,job_src,job_type,' ||
+      'closed_dt,location_cd,cons1,cons1_perc,close_reason,lead,competitor,filled_dt,' ||
+      'consultant,team,office,fee_perc,sal_from,sal_to,fixed_term,open_since,educ_level,' ||
+      'no_req,personal_attributes');
+
+    INSERT INTO #p7m_meta VALUES('contract_lead_jobs',
+      'job_id,createddate,created_by,updateddate,updated_by,street1,street2,locality,' ||
+      'town,county,post_code,country,no_req,std_hours,pay_period,chrg_rate,pay_rate,' ||
+      'status,job_title,start_dt,job_src,job_type,location_cd,cons1,cons1_perc,' ||
+      'close_reason,lead,filled_dt,consultant,team,office,personal_attributes');
+
+    INSERT INTO #p7m_meta VALUES('perm_lead_jobs',
+      'job_id,createddate,created_by,updateddate,updated_by,street1,street2,locality,' ||
+      'town,county,post_code,country,status,job_title,start_dt,job_src,job_type,' ||
+      'closed_dt,location_cd,cons1,cons1_perc,lead,filled_dt,consultant,team,office,' ||
+      'fee_perc,sal_from,sal_to,open_since,educ_level,no_req,personal_attributes');
 
     INSERT INTO #p7m_meta VALUES('candidates',
-      'candidate_id,createddate,created_by,updateddate,updated_by,' ||
-      'street1,street2,locality,town,county,' ||
-      'post_code,country,hot,source,status,not_period,' ||
-      'own_trans,high_edu_lev,def_role,avail_from,visa_exp,' ||
-      'cv_received,visa_type,ex_clusive,e_shot,cand_type,' ||
-      'part_time,rate_req,salary_req,ote_req,p_perm,' ||
-      'p_contr,relocate,look_for,home_email,work_email,perm_consultant,contract_consultant,' ||
-      'office,title,first_name,last_name,fullname,' ||
-      'salutation,initials,home_tel_number,work_tel_number,work_extension,' ||
-      'mobile_tel_number,notes');
+      'candidate_id,createddate,created_by,updateddate,updated_by,street1,street2,locality,' ||
+      'town,county,post_code,country,hot,source,status,not_period,own_trans,high_edu_lev,' ||
+      'def_role,avail_from,visa_exp,cv_received,visa_type,ex_clusive,e_shot,cand_type,' ||
+      'part_time,rate_req,salary_req,ote_req,p_perm,p_contr,relocate,look_for,home_email,' ||
+      'work_email,perm_consultant,permteam,contract_consultant,contract_team,office,title,' ||
+      'first_name,last_name,fullname,salutation,initials,home_tel_number,work_tel_number,' ||
+      'work_extension,mobile_tel_number,notes');
 
     INSERT INTO #p7m_meta VALUES('x_client_sub',
       'id,client,parent');
@@ -274,10 +283,9 @@ journal_client_visit_type=P14
       'id,candidate_id,skill');
 
     INSERT INTO #p7m_meta VALUES('candidate_prev_assign',
-      'prev_assign_id,candidate_id,createddate,created_by,' ||
-      'updateddate,updated_by,salary,status,start_date,' ||
-      'end_date,job_title,assig_type,prev_co,prv_manager,prv_man_tel,' ||
-      'notes,pay_rate');
+      'prev_assign_id,candidate_id,createddate,created_by,updateddate,updated_by,salary,' ||
+      'status,start_date,end_date,job_title,assig_type,prev_co,prv_manager,prv_man_tel,' ||
+      'notes,pay_rate,office');
 
     INSERT INTO #p7m_meta VALUES('x_pa_client',
       'id,prev_assign,contact,client');
@@ -285,69 +293,99 @@ journal_client_visit_type=P14
     INSERT INTO #p7m_meta VALUES('x_prev_assig_cand',
       'id,assignment,candidate');
 
-   INSERT INTO #p7m_meta VALUES('interviews',
-     'interview_id,createddate,created_by,updateddate,updated_by,' ||
-     'street1,street2,locality,town,county,' ||
-     'post_code,country,iv_cont,stage,iv_date,' ||
-     'iv_start,iv_end,iv_att');
+    INSERT INTO #p7m_meta VALUES('ext_interviews',
+      'interview_id,createddate,created_by,updateddate,updated_by,street1,street2,locality,' ||
+      'town,county,post_code,country,iv_cont,stage,iv_date,iv_start,iv_end,iv_att,internal,' ||
+      'perm_consultant,perm_team,contract_consultant,contract_team,office');
 
-   INSERT INTO #p7m_meta VALUES('perm_assign',
-     'assignment_id,createddate,created_by,updateddate,updated_by,salary,fee,' ||
-     'start_dt,cons1,cons1_perc,fee_pec,status,job_title,assig_type,filled_dt,' ||
-     'office');
+    INSERT INTO #p7m_meta VALUES('int_interviews',
+      'interview_id,createddate,created_by,updateddate,updated_by,stage,iv_date,iv_start,' ||
+      'iv_end,int_office,internal,int_cons,perm_consultant,perm_team,contract_consultant,' ||
+      'contract_team,office');
 
-   INSERT INTO #p7m_meta VALUES('contr_assign',
-     'assignment_id,createddate,created_by,updateddate,updated_by,status,start_dt,' ||
-     'end_dt,cons1,cons1_perc,job_title,assig_type,' ||
-     'filled_dt,orig_start,std_hours,std_days,prim_jcat_aw,' ||
-     'exempt_aw,cont_type,margin_val,margin_pcnt,pay_period,' ||
-     'chrg_rate,pay_rate,office');
+    INSERT INTO #p7m_meta VALUES('perm_assign',
+      'assignment_id,createddate,created_by,updateddate,updated_by,salary,fee,start_dt,' ||
+      'cons1,cons1_perc,fee_pec,status,job_title,assig_type,filled_dt,consultant,team,office');
 
-   INSERT INTO #p7m_meta VALUES('x_assig_cand',
-     'id,assignment,job,candidate');
+    INSERT INTO #p7m_meta VALUES('contr_assign',
+      'assignment_id,createddate,created_by,updateddate,updated_by,status,start_dt,end_dt,' ||
+      'cons1,cons1_perc,job_title,assig_type,filled_dt,orig_start,std_hours,std_days,' ||
+      'prim_jcat_aw,exempt_aw,cont_type,margin_val,margin_pcnt,pay_period,chrg_rate,' ||
+      'pay_rate,consultant,team,office');
 
-   INSERT INTO #p7m_meta VALUES('shortlist',
-     'shortlist_id,createddate,created_by,date_short,time_short,' ||
-     'status,last_cv_dt,last_cv_tm,last_iv_dt,last_iv_tm,' ||
-     'last_cv_by,last_iv_by,last_of_dt,last_of_tm,last_of_by,' ||
-     'offer_sal,rej_of_dt,rej_of_tm,rej_of_by,rej_dt,' ||
-     'rej_tm,rej_by,last_iv_st,rejected_by,rejected_res,' ||
-     'progress');
+    INSERT INTO #p7m_meta VALUES('x_assig_cand',
+      'id,assignment,job,candidate');
 
-   INSERT INTO #p7m_meta VALUES('x_short_cand',
-     'id,shortlist,job,candidate,contact,client');
+    INSERT INTO #p7m_meta VALUES('shortlist',
+      'shortlist_id,createddate,created_by,perm_consultant,perm_team,contract_consultant,' ||
+      'contract_team,office,date_short,time_short,status,last_cv_dt,last_cv_tm,last_iv_dt,' ||
+      'last_iv_tm,last_cv_by,last_iv_by,last_of_dt,last_of_tm,last_of_by,offer_sal,' ||
+      'rej_of_dt,rej_of_tm,rej_of_by,rej_dt,rej_tm,rej_by,last_iv_st,rejected_by,rejected_res,' ||
+      'progress,accepted_by,acc_off_date,acc_off_time');
 
-   INSERT INTO #p7m_meta VALUES('x_short_iv',
-     'id,shortlist,interview');
+    INSERT INTO #p7m_meta VALUES('x_short_cand',
+      'id,shortlist,job,candidate,contact,client');
 
-   INSERT INTO #p7m_meta VALUES('general_journals',
-     'journal_id,datetime,consultant,candidate,contact,client,job,notes');
+    INSERT INTO #p7m_meta VALUES('x_short_iv',
+      'id,shortlist,interview');
 
-   INSERT INTO #p7m_meta VALUES('send_email_journals',
-     'journal_id,datetime,consultant,candidate,contact,client,job,notes');
+    INSERT INTO #p7m_meta VALUES('general_journals',
+      'journal_id,datetime,consultant,candidate,contact,client,job,notes');
 
-   INSERT INTO #p7m_meta VALUES('call_made_log_journals',
-     'journal_id,datetime,consultant,candidate,contact,client,job,notes');
+    INSERT INTO #p7m_meta VALUES('send_email_journals',
+      'journal_id,datetime,consultant,candidate,contact,client,job,notes');
 
-   INSERT INTO #p7m_meta VALUES('client_visit_arranged_journals',
-     'journal_id,datetime,consultant,candidate,contact,client,job,notes');
+    INSERT INTO #p7m_meta VALUES('call_made_log_journals',
+      'journal_id,datetime,consultant,candidate,contact,client,job,notes');
 
-   INSERT INTO #p7m_meta VALUES('client_visit_attended_journals',
-     'journal_id,datetime,consultant,candidate,contact,client,job,notes');
+    INSERT INTO #p7m_meta VALUES('client_visit_arranged_journals',
+      'journal_id,datetime,consultant,candidate,contact,client,job,notes');
 
-   INSERT INTO #p7m_meta VALUES('documents',
+    INSERT INTO #p7m_meta VALUES('client_visit_attended_journals',
+      'journal_id,datetime,consultant,candidate,contact,client,job,notes');
+
+    INSERT INTO #p7m_meta VALUES('documents',
       'document_id,document_path,document_type,entity_reference,' ||
       'document_ext,document_description');
+
+--    UPDATE #p7m_meta
+--    SET cname = REPLACE(cname, 'perm_team,', '');
+--
+--    UPDATE #p7m_meta
+--    SET cname = REPLACE(cname, 'contract_team,', '');
+--
+--    UPDATE #p7m_meta
+--    SET cname = REPLACE(cname, 'team,', '');
+--
+--    UPDATE #p7m_meta
+--    SET cname = REPLACE(cname, 'close_reason,', '');
+--
+--    UPDATE #p7m_meta
+--    SET cname = REPLACE(cname, 'lead,', '');
+--
+--    UPDATE #p7m_meta
+--    SET cname = REPLACE(cname, 'competitor,', '');
+--
+--    UPDATE #p7m_meta
+--    SET cname = REPLACE(cname, 'internal,', '');
+--
+--    UPDATE #p7m_meta
+--    SET cname = REPLACE(cname, 'progress,accepted_by,acc_off_date,acc_off_time', '');
+--
+--    DELETE FROM #p7m_meta
+--    WHERE tname IN('perm_lead_jobs', 'contract_lead_jobs');
 
 ----------------------------------------------------------------------------
 -- Load data for X_CLIENT_CON.CSV
 
     CALL logger('Load X_CLIENT_CON', log_file_path);
 
-    SELECT DISTINCT TOP 5
+    SELECT DISTINCT
       organisation_ref
     INTO #client_list
     FROM opportunity
+    WHERE organisation_ref IN(658,4326,6603,16676,17354,17729,19979,
+                              24310,390450,391256,391412,393483,399584,477230,993271)
     ;
 
 --    BEGIN
@@ -384,7 +422,6 @@ journal_client_visit_type=P14
 
     CALL write_csv('x_client_con', csv_file_path);
 
-
 ----------------------------------------------------------------------------
 -- Load data for CLIENTS.CSV
 
@@ -411,8 +448,10 @@ journal_client_visit_type=P14
       ,CAST(NULL AS CHAR(4)) AS [industry]
       ,o.financial_year_end AS [fin_year]
       ,o.type AS [client_type]
-      ,o.responsible_user AS [contract_consultant]
       ,o.responsible_user AS [perm_consultant]
+      ,o.responsible_team AS [perm_team]
+      ,o.responsible_user AS [contract_consultant]
+      ,o.responsible_team AS [contract_team]
       ,o.responsible_team AS [office]
       ,a.telephone_number AS [work_telephone]
       ,a.fax_number AS [fax_telephone]
@@ -472,7 +511,9 @@ journal_client_visit_type=P14
       ,CASE pos.do_not_mailshot WHEN 'Y' THEN 'N' ELSE 'Y' END AS [e_shot]
       ,pos.email_address AS [work_email_add]
       ,pos.responsible_user AS [perm_consultant]
+      ,CAST(NULL AS CHAR(4)) AS [perm_team]
       ,CAST(NULL AS INT) AS [contract_consultant]
+      ,CAST(NULL AS CHAR(4)) AS [contract_team]
       ,CAST(NULL AS CHAR(4)) AS [office]
       ,per.title AS [title]
       ,per.first_name AS [first_name]
@@ -508,6 +549,8 @@ journal_client_visit_type=P14
     UPDATE #p7m_contacts
     SET
       contract_consultant = perm_consultant
+      ,perm_team = s.team
+      ,contract_team = s.team
       ,office = s.team
     FROM #p7m_contacts con
       INNER JOIN person_type pt ON con.perm_consultant = pt.person_ref
@@ -519,6 +562,8 @@ journal_client_visit_type=P14
     UPDATE #p7m_contacts
     SET
       contract_consultant = pt.person_ref
+      ,perm_team = s.team
+      ,contract_team = s.team
       ,office = s.team
     FROM #p7m_contacts con
       INNER JOIN search_code sc ON contact_id = position_ref
@@ -533,8 +578,7 @@ journal_client_visit_type=P14
 -- Copy update perm consultant to contract consultant
 
     UPDATE #p7m_contacts
-    SET perm_consultant = contract_consultant
-    FROM #p7m_contacts;
+    SET perm_consultant = contract_consultant;
 
     CALL write_csv('contacts', csv_file_path);
 
@@ -672,6 +716,7 @@ journal_client_visit_type=P14
       ,opp.no_persons_reqd AS [no_req]
       ,tv.hours_per_day AS [std_hours]
       ,tv.time_unit AS [pay_period]
+      ,'N' AS [fixed_term]
       ,tv.rate1_invoice AS [chrg_rate]
       ,tv.rate1_payment AS [pay_rate]
       ,opp.record_status AS [status]
@@ -683,10 +728,13 @@ journal_client_visit_type=P14
       ,opp.type AS [job_type]
       ,CAST(NULL AS CHAR(4)) AS [location_cd]
       ,opp.responsible_user AS [cons1]
-      ,100 AS [cons1_split]
-      ,'N' AS [fixed_term]
+      ,100 AS [cons1_perc]
+      ,opp.record_status AS [close_reason]
+      ,'N' AS [lead]
+      ,opp.record_status AS [competitor]
       ,opp.date_closed AS [filled_dt]
       ,opp.responsible_user AS [consultant]
+      ,opp.responsible_team AS [team]
       ,opp.responsible_team AS [office]
       ,REPLACE(REPLACE(opp.notes, '\x0d', ''), '\x0a', '') AS [personal_attributes]
     INTO #p7m_contract_jobs
@@ -723,7 +771,20 @@ journal_client_visit_type=P14
                                 FROM #p7m_vars WHERE [key] = 'job_contact_fee_event_type')
                     AND j.job_id = e.opportunity_ref);
 
-    CALL write_csv('contract_jobs', csv_file_path);
+    UPDATE #p7m_contract_jobs
+    SET lead = 'Y'
+    WHERE close_reason IN(SELECT [value]
+                          FROM #p7m_vars WHERE [key] = 'job_lead_record_status_type');
+
+    UPDATE #p7m_contract_jobs
+    SET close_reason = NULL
+    WHERE close_reason NOT IN(SELECT [value]
+                              FROM #p7m_vars WHERE [key] = 'job_close_reason_type');
+
+    UPDATE #p7m_contract_jobs
+    SET competitor = NULL
+    WHERE competitor NOT IN(SELECT [value]
+                            FROM #p7m_vars WHERE [key] = 'job_competitor_type');
 
 ----------------------------------------------------------------------------
 -- Load data for CONTRACT_JOB_INDUSTRY_SECTORS.CSV
@@ -829,9 +890,13 @@ journal_client_visit_type=P14
       ,opp.date_closed AS [closed_dt]
       ,CAST(NULL AS CHAR(4)) AS [location_cd]
       ,opp.responsible_user AS [cons1]
-      ,100 AS [cons1_split]
+      ,100 AS [cons1_perc]
+      ,opp.record_status AS [close_reason]
+      ,'N' AS [lead]
+      ,opp.record_status AS [competitor]
       ,opp.date_closed AS [filled_dt]
       ,opp.responsible_user AS [consultant]
+      ,opp.responsible_team AS [team]
       ,opp.responsible_team AS [office]
       ,pv.agreed_fee AS [fee_perc]
       ,pv.lower_income AS [sal_from]
@@ -867,7 +932,7 @@ journal_client_visit_type=P14
                   WHERE sc.search_type = 5
                     AND [key] IN('job_location_code_type', 'job_education_code_type')
                   GROUP BY
-                    opportunity_ref ) c ON j.job_id = c.opportunity_ref;
+                    opportunity_ref) c ON j.job_id = c.opportunity_ref;
 
     UPDATE #p7m_perm_jobs
     SET fixed_term = 'Y'
@@ -877,7 +942,20 @@ journal_client_visit_type=P14
                   WHERE type IN(SELECT [value] FROM #p7m_vars WHERE [key] = 'job_contact_fee_event_type')
                     AND j.job_id = e.opportunity_ref);
 
-    CALL write_csv('perm_jobs', csv_file_path);
+    UPDATE #p7m_perm_jobs
+    SET lead = 'Y'
+    WHERE close_reason IN(SELECT [value]
+                          FROM #p7m_vars WHERE [key] = 'job_lead_record_status_type');
+
+    UPDATE #p7m_perm_jobs
+    SET close_reason = NULL
+    WHERE close_reason NOT IN(SELECT [value]
+                              FROM #p7m_vars WHERE [key] = 'job_close_reason_type');
+
+    UPDATE #p7m_perm_jobs
+    SET competitor = NULL
+    WHERE competitor NOT IN(SELECT [value]
+                            FROM #p7m_vars WHERE [key] = 'job_competitor_type');
 
 ----------------------------------------------------------------------------
 -- Load data for PERM_JOB_INDUSTRY_SECTORS.CSV
@@ -977,16 +1055,19 @@ journal_client_visit_type=P14
       ,pos.end_date AS [end_date]
       ,pos.displayname AS [job_title]
       ,pos.type AS [assig_type]
-      ,org.displayname AS [prev_co]
+      ,CASE WHEN rs.[key] IS NOT NULL THEN org.displayname END AS [prev_co]
       ,org.organisation_ref AS prev_co_id
       ,mgr.displayname AS [prv_manager]
       ,mpos.position_ref AS prv_manager_id
       ,ISNULL(mpos.telephone_number, a.telephone_number) AS [prv_man_tel]
       ,REPLACE(REPLACE(pos.notes, '\x0d', ' '), '\x0a', ' ') AS [notes]
       ,te.hours_details AS [pay_rate]
+      ,ISNULL(s.team, pos.responsible_team) AS [office]
     INTO #p7m_candidate_prev_assign
     FROM position pos
       INNER JOIN person per ON pos.person_ref = per.person_ref
+      LEFT OUTER JOIN person_type pt ON pos.person_ref = per.person_ref AND pt.type LIKE 'Z%'
+      LEFT OUTER JOIN staff s ON pt.person_type_ref = s.person_type_ref
       LEFT OUTER JOIN permanent_emp pe ON pos.position_ref = pe.position_ref
       LEFT OUTER JOIN temporary_emp te ON pos.position_ref = te.position_ref
       LEFT OUTER JOIN organisation org ON pos.organisation_ref = org.organisation_ref
@@ -999,11 +1080,64 @@ journal_client_visit_type=P14
                                                    FROM #p7m_vars
                                                    WHERE [key] = 'contact_record_status_code')
       LEFT OUTER JOIN address a ON pos.address_ref = a.address_ref
-    WHERE pos.organisation_ref IN(SELECT client_id FROM #p7m_clients);
+      LEFT OUTER JOIN #p7m_vars rs ON org.record_status = rs.[value]
+                                  AND rs.[key] ='client_employer_only_record_status_code'
+    WHERE pos.organisation_ref IN(SELECT client_id FROM #p7m_clients)
+      AND pos.person_ref IN(SELECT candidate_id FROM #p7m_candidates);
 
     CREATE INDEX candidate_prev_assign_idx ON #p7m_candidate_prev_assign (candidate_id);
 
     CALL write_csv('candidate_prev_assign', csv_file_path);
+
+----------------------------------------------------------------------------
+-- Load data for CONTACT_PREV_ASSIGN.CSV
+
+    CALL logger('Load CCONTACT_PREV_ASSIGN', log_file_path);
+
+    SELECT
+      pos.position_ref AS [prev_assign_id]
+      ,pos.position_ref AS [candidate_id]
+      ,pos.create_timestamp AS [createddate]
+      ,pos.create_user AS [created_by]
+      ,GETDATE() AS [updateddate]
+      ,pos.update_user AS [updated_by]
+      ,pe.income AS [salary]
+      ,pos.record_status AS [status]
+      ,pos.start_date AS [start_date]
+      ,pos.end_date AS [end_date]
+      ,pos.displayname AS [job_title]
+      ,pos.type AS [assig_type]
+      ,org.displayname AS [prev_co]
+      ,org.organisation_ref AS prev_co_id
+      ,mgr.displayname AS [prv_manager]
+      ,mpos.position_ref AS prv_manager_id
+      ,ISNULL(mpos.telephone_number, a.telephone_number) AS [prv_man_tel]
+      ,REPLACE(REPLACE(pos.notes, '\x0d', ' '), '\x0a', ' ') AS [notes]
+      ,te.hours_details AS [pay_rate]
+      ,ISNULL(s.team, pos.responsible_team) AS [office]
+    INTO #p7m_contact_prev_assign
+    FROM position pos
+      INNER JOIN person per ON pos.person_ref = per.person_ref
+      LEFT OUTER JOIN person_type pt ON pos.person_ref = per.person_ref AND pt.type LIKE 'Z%'
+      LEFT OUTER JOIN staff s ON pt.person_type_ref = s.person_type_ref
+      LEFT OUTER JOIN permanent_emp pe ON pos.position_ref = pe.position_ref
+      LEFT OUTER JOIN temporary_emp te ON pos.position_ref = te.position_ref
+      LEFT OUTER JOIN organisation org ON pos.organisation_ref = org.organisation_ref
+      LEFT OUTER JOIN person mgr ON pos.manager_person_ref = mgr.person_ref
+      LEFT OUTER JOIN position mpos ON mgr.person_ref = mpos.person_ref
+                         AND mpos.contact_status IN(SELECT [value]
+                                                    FROM #p7m_vars
+                                                    WHERE [key] = 'contact_contact_status_code')
+                         AND mpos.record_status IN(SELECT [value]
+                                                   FROM #p7m_vars
+                                                   WHERE [key] = 'contact_record_status_code')
+      LEFT OUTER JOIN address a ON pos.address_ref = a.address_ref
+    WHERE pos.organisation_ref IN(SELECT client_id FROM #p7m_clients)
+      AND pos.position_ref IN(SELECT contact_id FROM #p7m_contacts);
+
+    CREATE INDEX contact_prev_assign_idx ON #p7m_contact_prev_assign (candidate_id);
+
+    CALL write_csv('contact_prev_assign', csv_file_path);
 
 ----------------------------------------------------------------------------
 -- Load data for SHORTLIST.CSV
@@ -1046,7 +1180,12 @@ journal_client_visit_type=P14
       ,can.person_ref AS candidate_id
       ,con.person_ref AS person_id
       ,MIN(e.create_timestamp) AS [createddate]
-      ,MIN(e.create_user) AS [created_by]
+      ,MAX(CASE WHEN e.event_ref = first_event_ref THEN e.create_user END) AS [created_by]
+      ,MAX(CASE WHEN e.event_ref = first_event_ref THEN cons.person_ref END) AS [perm_consultant]
+      ,MAX(CASE WHEN e.event_ref = first_event_ref THEN cons.team END) AS [perm_team]
+      ,MAX(CASE WHEN e.event_ref = first_event_ref THEN cons.person_ref END) AS [contract_consultant]
+      ,MAX(CASE WHEN e.event_ref = first_event_ref THEN cons.team END) AS [contract_team]
+      ,MAX(CASE WHEN e.event_ref = first_event_ref THEN cons.team END) AS [office]
       ,MIN(e.event_date) AS [date_short]
       ,MIN(e.event_time) AS [time_short]
       ,MAX(CASE WHEN e.event_ref = last_event_ref
@@ -1073,9 +1212,10 @@ journal_client_visit_type=P14
       ,MIN(CASE e.event_ref WHEN last_interview_event_ref THEN e.event_time END) AS [last_iv_tm]
       ,MIN(CASE e.event_ref WHEN last_cv_event_ref THEN e.create_user END) AS [last_cv_by]
       ,MIN(CASE e.event_ref WHEN last_interview_event_ref THEN e.create_user END) AS [last_iv_by]
-      ,MIN(CASE e.event_ref WHEN last_offer_event_ref THEN e.event_date END) AS [last_of_dt]
       ,MIN(CASE e.event_ref WHEN last_offer_event_ref
-                            THEN CAST(update_timestamp AS TIME) END) AS [last_of_tm]
+                            THEN create_timestamp END) AS [last_of_dt]
+      ,MIN(CASE e.event_ref WHEN last_offer_event_ref
+                            THEN CAST(create_timestamp AS TIME) END) AS [last_of_tm]
       ,MIN(CASE e.event_ref WHEN last_offer_event_ref THEN e.create_user END) AS [last_of_by]
       ,MAX(pla.income) AS [offer_sal]
       ,MIN(CASE e.event_ref WHEN last_rejected_offer_event_ref THEN e.outcome_date END) AS [rej_of_dt]
@@ -1113,16 +1253,22 @@ journal_client_visit_type=P14
                             THEN 'Interview Arranged'
                           END
                 END) AS [progress]
+      ,MIN(CASE e.event_ref WHEN last_offer_event_ref THEN cons.person_ref END) AS [accepted_by]
+      ,MIN(CASE e.event_ref WHEN last_offer_event_ref THEN e.outcome_date END) AS [acc_off_date]
+      ,MIN(CASE e.event_ref WHEN last_offer_event_ref
+                            THEN CAST(e.outcome_date AS DATETIME) END) AS [acc_off_time]
     INTO #p7m_shortlist
     FROM event e
       INNER JOIN event_role can ON e.event_ref = can.event_ref
       INNER JOIN event_role con ON e.event_ref = con.event_ref
+      INNER JOIN event_role cons ON e.event_ref = cons.event_ref
       LEFT OUTER JOIN placing pla ON e.event_ref = pla.event_ref
       INNER JOIN #shortlist_dates fle ON e.opportunity_ref = fle.opportunity_ref
                                      AND can.person_ref = fle.person_ref
     WHERE e.type IN('A', 'F', 'H', 'KE03', 'Q21', 'Q31', 'Q32', 'Q33', 'Q34', 'Q35', 'Q36')
       AND can.type IN('A1', 'D', 'F', 'H', 'K')
       AND con.type IN('C1')
+      AND cons.type IN('UC1')
     GROUP BY
       e.opportunity_ref
       ,con.person_ref
@@ -1194,7 +1340,7 @@ journal_client_visit_type=P14
       ,CASE per.do_not_mailshot WHEN 'Y' THEN 'N' ELSE 'Y' END AS [e_shot]
       ,CASE WHEN ptp.type IS NOT NULL AND ptc.type IS NOT NULL
             THEN CASE WHEN canc.income_required IS NOT NULL
-                      THEN ptc.type || ', ' || ptc.type
+                      THEN ptc.type || ', ' || ptp.type
                       ELSE ptp.type END
             ELSE ISNULL(ptp.type, ptc.type)
             END AS [cand_type]
@@ -1213,7 +1359,9 @@ journal_client_visit_type=P14
       ,per.email_address AS [home_email]
       ,pos.email_address AS [work_email]
       ,per.responsible_user AS [perm_consultant]
+      ,per.responsible_team AS [perm_team]
       ,per.responsible_user AS [contract_consultant]
+      ,per.responsible_team AS [contract_team]
       ,per.responsible_team AS [office]
       ,per.title AS [title]
       ,per.first_name AS [first_name]
@@ -1423,7 +1571,9 @@ journal_client_visit_type=P14
       ,prev_co_id AS [client]
     INTO #p7m_x_pa_client
     FROM #p7m_candidate_prev_assign
-    WHERE prev_co_id IN(SELECT client_id FROM #p7m_clients);
+    WHERE prev_co_id IN(SELECT client_id FROM #p7m_clients)
+      AND status NOT IN(SELECT [value] FROM #p7m_vars
+                        WHERE [key] = 'client_employer_only_record_status_code');
 
     CALL write_csv('x_pa_client', csv_file_path);
 
@@ -1484,7 +1634,9 @@ journal_client_visit_type=P14
       ,opp.displayname AS job_title
       ,'Pemanent Placement' AS assig_type
       ,opp.date_closed AS filled_dt
-      ,MAX(cons.team) AS office
+      ,MAX(CASE e.type WHEN '1PA' THEN cons.person_ref END) AS consultant
+      ,MAX(CASE e.type WHEN '1PA' THEN cons.team END) AS team
+      ,MAX(CASE e.type WHEN '1PA' THEN cons.team END) AS office
       ,opp.opportunity_ref AS job_id
       ,can.person_ref AS candidate_id
     INTO #perm_assign_temp
@@ -1524,6 +1676,8 @@ journal_client_visit_type=P14
       ,job_title AS [job_title]
       ,assig_type AS [assig_type]
       ,filled_dt AS [filled_dt]
+      ,consultant AS [consultant]
+      ,team AS [team]
       ,office AS [office]
     INTO #p7m_perm_assign
     FROM #perm_assign_temp;
@@ -1564,6 +1718,8 @@ journal_client_visit_type=P14
       ,tb.time_unit AS pay_period
       ,tb.rate1_payment AS chrg_rate
       ,tb.rate1_invoice AS pay_rate
+      ,cons.person_ref AS consultant
+      ,cons.team AS team
       ,cons.team AS office
       ,opp.opportunity_ref AS job_id
       ,can.person_ref AS candidate_id
@@ -1609,6 +1765,8 @@ journal_client_visit_type=P14
       ,pay_period AS [pay_period]
       ,chrg_rate AS [chrg_rate]
       ,pay_rate AS [pay_rate]
+      ,consultant AS [consultant]
+      ,team AS [team]
       ,office AS [office]
     INTO #p7m_contr_assign
     FROM #contr_assign_temp;
@@ -1627,7 +1785,7 @@ journal_client_visit_type=P14
       CAST(NULL AS INT) AS [id]
       ,assignment_id AS [assignment]
       ,job_id AS [job]
-      ,candidate_id  AS [candidate]
+      ,candidate_id AS [candidate]
     INTO #p7m_x_assig_cand
     FROM #perm_assign_temp;
 
@@ -1636,7 +1794,7 @@ journal_client_visit_type=P14
       CAST(NULL AS INT) AS [id]
       ,assignment_id AS [assignment]
       ,job_id AS [job]
-      ,candidate_id  AS [candidate]
+      ,candidate_id AS [candidate]
     FROM #contr_assign_temp;
 
     UPDATE #p7m_x_assig_cand
@@ -1671,11 +1829,19 @@ journal_client_visit_type=P14
       ,e.event_date AS [iv_date]
       ,e.event_time AS [iv_start]
       ,CASE WHEN e.duration IS NULL
-            THEN CAST(DATEADD(HOUR, 1, e.event_time) AS TIME)
+            THEN CAST(DATEADD(HOUR, 1, e.event_time) AS DATETIME)
             ELSE CAST(DATEADD(MINUTE, MINUTE(e.duration),
-                      DATEADD(HOUR, HOUR(e.duration), e.event_time)) AS TIME)
+                      DATEADD(HOUR, HOUR(e.duration), e.event_time)) AS DATETIME)
             END AS [iv_end]
       ,CAST(NULL AS CHAR(1)) AS [iv_att]
+      ,er_cons.team AS [int_office]
+      ,CASE WHEN e.type IN('Q13', 'Q15') THEN 'Y' ELSE 'N' END AS [internal]
+      ,er_cons.person_ref AS [int_cons]
+      ,er_cons.person_ref AS [perm_consultant]
+      ,er_cons.team AS [perm_team]
+      ,er_cons.person_ref AS [contract_consultant]
+      ,er_cons.team AS [contract_team]
+      ,er_cons.team AS [office]
       ,e.opportunity_ref AS job_id
       ,er_can.person_ref AS candidate_id
     INTO #p7m_interviews
@@ -1684,10 +1850,12 @@ journal_client_visit_type=P14
       INNER JOIN event_role er_con ON e.event_ref = er_con.event_ref
       INNER JOIN position con ON er_con.person_ref = con.person_ref
                              AND er_con.organisation_ref = con.organisation_ref
+      INNER JOIN event_role er_cons ON e.event_ref = er_cons.event_ref
       LEFT OUTER JOIN address a ON con.address_ref = a.address_ref
-    WHERE e.type IN('Q31','Q32','Q33','Q34','Q35','Q36')
+    WHERE e.type IN('Q13','Q15','Q31','Q32','Q33','Q34','Q35','Q36')
       AND er_can.type IN('A1','D','F','H','K')
       AND er_con.type IN('C1')
+      AND er_cons.type IN('U1')
       AND EXISTS (SELECT 1
                   FROM position p
                   WHERE p.person_ref = con.person_ref
@@ -1718,7 +1886,21 @@ journal_client_visit_type=P14
     SET iv_att = 'Y'
     WHERE interview_id IN(SELECT last_interview_event_ref FROM #shortlist_dates);
 
-    CALL write_csv('interviews', csv_file_path);
+    SELECT *
+    INTO #p7m_ext_interviews
+    FROM #p7m_interviews
+    WHERE internal = 'N';
+
+    CALL write_csv('ext_interviews', csv_file_path);
+    DROP TABLE #p7m_ext_interviews;
+
+    SELECT *
+    INTO #p7m_int_interviews
+    FROM #p7m_interviews
+    WHERE internal = 'Y';
+
+    CALL write_csv('int_interviews', csv_file_path);
+    DROP TABLE #p7m_int_interviews;
 
 ----------------------------------------------------------------------------
 -- Load data for X_SHORT_IV.CSV
@@ -1931,6 +2113,46 @@ journal_client_visit_type=P14
 
 ----------------------------------------------------------------------------
 
+-- Load data for PERM_LEAD_JOBS
+
+    CALL logger('Load PERM_LEAD_JOBS', log_file_path);
+
+    SELECT *
+    INTO #p7m_perm_lead_jobs
+    FROM #p7m_perm_jobs
+    WHERE lead = 'Y';
+
+    DELETE #p7m_perm_jobs
+    WHERE lead = 'Y';
+
+    CALL write_csv('perm_jobs', csv_file_path);
+    CALL write_csv('perm_lead_jobs', csv_file_path);
+
+    DROP TABLE #p7m_perm_jobs;
+    DROP TABLE #p7m_perm_lead_jobs;
+
+----------------------------------------------------------------------------
+
+-- Load data for CONTRACT_LEAD_JOBS
+
+    CALL logger('Load CONTRACT_LEAD_JOBS', log_file_path);
+
+    SELECT *
+    INTO #p7m_contract_lead_jobs
+    FROM #p7m_contract_jobs
+    WHERE lead = 'Y';
+
+    DELETE #p7m_perm_jobs
+    WHERE lead = 'Y';
+
+    CALL write_csv('contract_jobs', csv_file_path);
+    CALL write_csv('contract_lead_jobs', csv_file_path);
+
+    DROP TABLE #p7m_contract_jobs;
+    DROP TABLE #p7m_contract_lead_jobs;
+
+----------------------------------------------------------------------------
+
 -- Load data for DOCUMENTS
 
     CALL logger('Load DOCUMENTS', log_file_path);
@@ -1985,8 +2207,6 @@ journal_client_visit_type=P14
                   WHERE l.parent_object_ref = candidate_id);
 
     CALL write_csv('documents', csv_file_path);
-
-    DROP TABLE #p7m_documents;
 
 ----------------------------------------------------------------------------
 -- Output CSV files
@@ -2056,6 +2276,8 @@ journal_client_visit_type=P14
     CALL logger('Create ZIP file', log_file_path);
 
     EXECUTE ('xp_cmdshell ''"' || csv_file_path || 'documents.bat" ''');
+
+    DROP TABLE #p7m_documents;
 
 ----------------------------------------------------------------------------
 -- Clean up
