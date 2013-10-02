@@ -46,6 +46,7 @@ journal_general_type=Q11,Q14,P15,KA1,G,P13
 journal_send_email_type=KE01,P05,KA2
 journal_call_made_log_type=P11,KD2
 journal_client_visit_type=P14
+journal_internal_interview_arranged_type=Q13,Q15
 ';
 
   BEGIN
@@ -180,6 +181,11 @@ journal_client_visit_type=P14
       'fin_year,client_type,perm_consultant,perm_team,contract_consultant,contract_team,office,' ||
       'work_telephone,fax_telephone,consultant_notes');
 
+    INSERT INTO #p7m_meta VALUES('legal_entity',
+      'legal_entity_id,createddate,created_by,updateddate,updated_by,street1,street2,' ||
+      'locality,town,county,post_code,country,industry,name,trad_name,status,office,' ||
+      'tel_number');
+
     INSERT INTO #p7m_meta VALUES('contacts',
       'contact_id,person_id,createddate,created_by,updateddate,updated_by,street1,' ||
       'street2,locality,town,county,post_code,country,status,contact_role,e_shot,' ||
@@ -218,12 +224,15 @@ journal_client_visit_type=P14
       'town,county,post_code,country,hot,source,status,not_period,own_trans,high_edu_lev,' ||
       'def_role,avail_from,visa_exp,cv_received,visa_type,ex_clusive,e_shot,cand_type,' ||
       'part_time,rate_req,salary_req,ote_req,p_perm,p_contr,relocate,look_for,home_email,' ||
-      'work_email,perm_consultant,permteam,contract_consultant,contract_team,office,title,' ||
+      'work_email,perm_consultant,perm_team,contract_consultant,contract_team,office,title,' ||
       'first_name,last_name,fullname,salutation,initials,home_tel_number,work_tel_number,' ||
       'work_extension,mobile_tel_number,notes');
 
     INSERT INTO #p7m_meta VALUES('x_client_sub',
       'id,client,parent');
+
+    INSERT INTO #p7m_meta VALUES('x_le_client',
+      'id,le,client');
 
     INSERT INTO #p7m_meta VALUES('x_client_job',
       'id,client,contact,job');
@@ -388,20 +397,20 @@ journal_client_visit_type=P14
                               24310,390450,391256,391412,393483,399584,477230,993271)
     ;
 
---    BEGIN
---      DECLARE i INT;
---      SET i = 0;
---      WHILE (i < 6) LOOP
---
---        INSERT INTO #client_list
---        SELECT parent_organ_ref
---        FROM organisation org
---          INNER JOIN #client_list cl ON org.organisation_ref = cl.organisation_ref
---        WHERE parent_organ_ref NOT IN(SELECT organisation_ref FROM #client_list);
---
---        SET i = i + 1;
---      END LOOP;
---    END;
+    BEGIN
+      DECLARE i INT;
+      SET i = 0;
+      WHILE (i < 6) LOOP
+
+        INSERT INTO #client_list
+        SELECT parent_organ_ref
+        FROM organisation org
+          INNER JOIN #client_list cl ON org.organisation_ref = cl.organisation_ref
+        WHERE parent_organ_ref NOT IN(SELECT organisation_ref FROM #client_list);
+
+        SET i = i + 1;
+      END LOOP;
+    END;
 
     CREATE UNIQUE INDEX p7m_client_list_idx ON #client_list (organisation_ref);
 
@@ -456,6 +465,9 @@ journal_client_visit_type=P14
       ,a.telephone_number AS [work_telephone]
       ,a.fax_number AS [fax_telephone]
       ,REPLACE(REPLACE(o.notes, '\x0d', ''), '\x0a', '') AS [consultant_notes]
+      ,parent_organ_ref AS parent_id
+      ,CASE WHEN parent_organ_ref IS NULL THEN 'Y' ELSE 'N' END AS is_le
+      ,CASE WHEN parent_organ_ref IS NULL THEN o.organisation_ref END AS le_id
     INTO #p7m_clients
     FROM organisation o
       LEFT OUTER JOIN address a ON o.organisation_ref = a.organisation_ref
@@ -485,7 +497,54 @@ journal_client_visit_type=P14
                   GROUP BY
                     organisation_ref) co ON cl.client_id = co.organisation_ref;
 
+    BEGIN
+      DECLARE i INT;
+      SET i = 0;
+      WHILE (i < 6) LOOP
+
+        UPDATE #p7m_clients
+        SET le_id = p.client_id
+        FROM #p7m_clients c
+          INNER JOIN (SELECT *
+                      FROM #p7m_clients
+                      WHERE le_id IS NOT NULL) p ON c.parent_id = p.client_id
+        WHERE c.le_id IS NULL;
+
+        SET i = i + 1;
+      END LOOP;
+    END;
+
     CALL write_csv('clients', csv_file_path);
+
+----------------------------------------------------------------------------
+-- Load data for LEGAL_ENTITY.CSV
+
+    CALL logger('Load LEGAL_ENTITY', log_file_path);
+
+    SELECT
+      client_id AS [legal_entity_id]
+      ,createddate AS [createddate]
+      ,created_by AS [created_by]
+      ,updateddate AS [updateddate]
+      ,updated_by AS [updated_by]
+      ,street1 AS [street1]
+      ,street2 AS [street2]
+      ,locality AS [locality]
+      ,town AS [town]
+      ,county AS [county]
+      ,post_code AS [post_code]
+      ,country AS [country]
+      ,industry AS [industry]
+      ,name AS [name]
+      ,name AS [trad_name]
+      ,status AS [status]
+      ,office AS [office]
+      ,work_telephone AS [tel_number]
+    INTO #p7m_legal_entity
+    FROM #p7m_clients
+    WHERE is_le = 'Y';
+
+    CALL write_csv('legal_entity', csv_file_path);
 
 ----------------------------------------------------------------------------
 -- Load data for CONTACTS.CSV
@@ -666,30 +725,27 @@ journal_client_visit_type=P14
 
     CALL logger('Load X_CLIENT_JOB', log_file_path);
 
-    SELECT
-      IDENTITY(10) AS [id]
-      ,organisation_ref AS [client]
-      ,position_ref AS [contact]
-      ,opportunity_ref AS [job]
+    SELECT DISTINCT
+      CAST(NULL AS INT) AS [id]
+      ,o.organisation_ref AS [client]
+      ,rl.position_ref AS [contact]
+      ,o.opportunity_ref AS [job]
     INTO #p7m_x_client_job
-    FROM (
-      SELECT DISTINCT
-        o.organisation_ref
-        ,rl.position_ref
-        ,o.opportunity_ref
-      FROM opportunity o
-        LEFT OUTER JOIN opport_role rl ON o.opportunity_ref = rl.opportunity_ref
-      WHERE EXISTS (SELECT 1
-                    FROM #p7m_vars
-                    WHERE rl.role_type = [value]
-                      AND [key] = 'client_contact_role_type')
-        AND EXISTS (SELECT 1
-                    FROM #client_list c
-                    WHERE o.organisation_ref = c.organisation_ref)
-        AND EXISTS (SELECT 1
-                    FROM #p7m_contacts c
-                    WHERE rl.position_ref = c.contact_id)
-      ) a;
+    FROM opportunity o
+      INNER JOIN opport_role rl ON o.opportunity_ref = rl.opportunity_ref
+    WHERE EXISTS (SELECT 1
+                  FROM #p7m_vars
+                  WHERE rl.role_type = [value]
+                    AND [key] = 'client_contact_role_type')
+      AND EXISTS (SELECT 1
+                  FROM #client_list c
+                  WHERE o.organisation_ref = c.organisation_ref)
+      AND EXISTS (SELECT 1
+                  FROM #p7m_contacts c
+                  WHERE rl.position_ref = c.contact_id);
+
+    UPDATE #p7m_x_client_job
+    SET [id] = IDENTITY(10);
 
     CREATE UNIQUE INDEX p7m_x_client_job_idx ON #p7m_x_client_job (client, contact, job);
 
@@ -1038,108 +1094,6 @@ journal_client_visit_type=P14
     DROP TABLE #p7m_perm_job_skills;
 
 ----------------------------------------------------------------------------
--- Load data for CANDIDATE_PREV_ASSIGN.CSV
-
-    CALL logger('Load CANDIDATE_PREV_ASSIGN', log_file_path);
-
-    SELECT
-      pos.position_ref AS [prev_assign_id]
-      ,pos.person_ref AS [candidate_id]
-      ,pos.create_timestamp AS [createddate]
-      ,pos.create_user AS [created_by]
-      ,GETDATE() AS [updateddate]
-      ,pos.update_user AS [updated_by]
-      ,pe.income AS [salary]
-      ,pos.record_status AS [status]
-      ,pos.start_date AS [start_date]
-      ,pos.end_date AS [end_date]
-      ,pos.displayname AS [job_title]
-      ,pos.type AS [assig_type]
-      ,CASE WHEN rs.[key] IS NOT NULL THEN org.displayname END AS [prev_co]
-      ,org.organisation_ref AS prev_co_id
-      ,mgr.displayname AS [prv_manager]
-      ,mpos.position_ref AS prv_manager_id
-      ,ISNULL(mpos.telephone_number, a.telephone_number) AS [prv_man_tel]
-      ,REPLACE(REPLACE(pos.notes, '\x0d', ' '), '\x0a', ' ') AS [notes]
-      ,te.hours_details AS [pay_rate]
-      ,ISNULL(s.team, pos.responsible_team) AS [office]
-    INTO #p7m_candidate_prev_assign
-    FROM position pos
-      INNER JOIN person per ON pos.person_ref = per.person_ref
-      LEFT OUTER JOIN person_type pt ON pos.person_ref = per.person_ref AND pt.type LIKE 'Z%'
-      LEFT OUTER JOIN staff s ON pt.person_type_ref = s.person_type_ref
-      LEFT OUTER JOIN permanent_emp pe ON pos.position_ref = pe.position_ref
-      LEFT OUTER JOIN temporary_emp te ON pos.position_ref = te.position_ref
-      LEFT OUTER JOIN organisation org ON pos.organisation_ref = org.organisation_ref
-      LEFT OUTER JOIN person mgr ON pos.manager_person_ref = mgr.person_ref
-      LEFT OUTER JOIN position mpos ON mgr.person_ref = mpos.person_ref
-                         AND mpos.contact_status IN(SELECT [value]
-                                                    FROM #p7m_vars
-                                                    WHERE [key] = 'contact_contact_status_code')
-                         AND mpos.record_status IN(SELECT [value]
-                                                   FROM #p7m_vars
-                                                   WHERE [key] = 'contact_record_status_code')
-      LEFT OUTER JOIN address a ON pos.address_ref = a.address_ref
-      LEFT OUTER JOIN #p7m_vars rs ON org.record_status = rs.[value]
-                                  AND rs.[key] ='client_employer_only_record_status_code'
-    WHERE pos.organisation_ref IN(SELECT client_id FROM #p7m_clients)
-      AND pos.person_ref IN(SELECT candidate_id FROM #p7m_candidates);
-
-    CREATE INDEX candidate_prev_assign_idx ON #p7m_candidate_prev_assign (candidate_id);
-
-    CALL write_csv('candidate_prev_assign', csv_file_path);
-
-----------------------------------------------------------------------------
--- Load data for CONTACT_PREV_ASSIGN.CSV
-
-    CALL logger('Load CCONTACT_PREV_ASSIGN', log_file_path);
-
-    SELECT
-      pos.position_ref AS [prev_assign_id]
-      ,pos.position_ref AS [candidate_id]
-      ,pos.create_timestamp AS [createddate]
-      ,pos.create_user AS [created_by]
-      ,GETDATE() AS [updateddate]
-      ,pos.update_user AS [updated_by]
-      ,pe.income AS [salary]
-      ,pos.record_status AS [status]
-      ,pos.start_date AS [start_date]
-      ,pos.end_date AS [end_date]
-      ,pos.displayname AS [job_title]
-      ,pos.type AS [assig_type]
-      ,org.displayname AS [prev_co]
-      ,org.organisation_ref AS prev_co_id
-      ,mgr.displayname AS [prv_manager]
-      ,mpos.position_ref AS prv_manager_id
-      ,ISNULL(mpos.telephone_number, a.telephone_number) AS [prv_man_tel]
-      ,REPLACE(REPLACE(pos.notes, '\x0d', ' '), '\x0a', ' ') AS [notes]
-      ,te.hours_details AS [pay_rate]
-      ,ISNULL(s.team, pos.responsible_team) AS [office]
-    INTO #p7m_contact_prev_assign
-    FROM position pos
-      INNER JOIN person per ON pos.person_ref = per.person_ref
-      LEFT OUTER JOIN person_type pt ON pos.person_ref = per.person_ref AND pt.type LIKE 'Z%'
-      LEFT OUTER JOIN staff s ON pt.person_type_ref = s.person_type_ref
-      LEFT OUTER JOIN permanent_emp pe ON pos.position_ref = pe.position_ref
-      LEFT OUTER JOIN temporary_emp te ON pos.position_ref = te.position_ref
-      LEFT OUTER JOIN organisation org ON pos.organisation_ref = org.organisation_ref
-      LEFT OUTER JOIN person mgr ON pos.manager_person_ref = mgr.person_ref
-      LEFT OUTER JOIN position mpos ON mgr.person_ref = mpos.person_ref
-                         AND mpos.contact_status IN(SELECT [value]
-                                                    FROM #p7m_vars
-                                                    WHERE [key] = 'contact_contact_status_code')
-                         AND mpos.record_status IN(SELECT [value]
-                                                   FROM #p7m_vars
-                                                   WHERE [key] = 'contact_record_status_code')
-      LEFT OUTER JOIN address a ON pos.address_ref = a.address_ref
-    WHERE pos.organisation_ref IN(SELECT client_id FROM #p7m_clients)
-      AND pos.position_ref IN(SELECT contact_id FROM #p7m_contacts);
-
-    CREATE INDEX contact_prev_assign_idx ON #p7m_contact_prev_assign (candidate_id);
-
-    CALL write_csv('contact_prev_assign', csv_file_path);
-
-----------------------------------------------------------------------------
 -- Load data for SHORTLIST.CSV
 
     CALL logger('Load SHORTLIST', log_file_path);
@@ -1404,8 +1358,7 @@ journal_client_visit_type=P14
                   FROM person_type pts
                   WHERE pts.type IN('A', 'C')
                     AND per.person_ref = pts.person_ref)
-      AND (per.person_ref IN(SELECT candidate_id FROM #p7m_shortlist) OR
-           per.person_ref IN(SELECT candidate_id FROM #p7m_candidate_prev_assign))
+      AND per.person_ref IN(SELECT candidate_id FROM #p7m_shortlist)
     ;
 
     CREATE UNIQUE INDEX p7m_candidates_idx ON #p7m_candidates (candidate_id);
@@ -1560,6 +1513,108 @@ journal_client_visit_type=P14
     DROP TABLE #p7m_candidate_skills;
 
 ----------------------------------------------------------------------------
+-- Load data for CANDIDATE_PREV_ASSIGN.CSV
+
+    CALL logger('Load CANDIDATE_PREV_ASSIGN', log_file_path);
+
+    SELECT
+      pos.position_ref AS [prev_assign_id]
+      ,pos.person_ref AS [candidate_id]
+      ,pos.create_timestamp AS [createddate]
+      ,pos.create_user AS [created_by]
+      ,GETDATE() AS [updateddate]
+      ,pos.update_user AS [updated_by]
+      ,pe.income AS [salary]
+      ,pos.record_status AS [status]
+      ,pos.start_date AS [start_date]
+      ,pos.end_date AS [end_date]
+      ,pos.displayname AS [job_title]
+      ,pos.type AS [assig_type]
+      ,CASE WHEN rs.[key] IS NOT NULL THEN org.displayname END AS [prev_co]
+      ,org.organisation_ref AS prev_co_id
+      ,mgr.displayname AS [prv_manager]
+      ,mpos.position_ref AS prv_manager_id
+      ,ISNULL(mpos.telephone_number, a.telephone_number) AS [prv_man_tel]
+      ,REPLACE(REPLACE(pos.notes, '\x0d', ' '), '\x0a', ' ') AS [notes]
+      ,te.hours_details AS [pay_rate]
+      ,ISNULL(s.team, pos.responsible_team) AS [office]
+    INTO #p7m_candidate_prev_assign
+    FROM position pos
+      INNER JOIN person per ON pos.person_ref = per.person_ref
+      LEFT OUTER JOIN person_type pt ON pos.person_ref = per.person_ref AND pt.type LIKE 'Z%'
+      LEFT OUTER JOIN staff s ON pt.person_type_ref = s.person_type_ref
+      LEFT OUTER JOIN permanent_emp pe ON pos.position_ref = pe.position_ref
+      LEFT OUTER JOIN temporary_emp te ON pos.position_ref = te.position_ref
+      LEFT OUTER JOIN organisation org ON pos.organisation_ref = org.organisation_ref
+      LEFT OUTER JOIN person mgr ON pos.manager_person_ref = mgr.person_ref
+      LEFT OUTER JOIN position mpos ON mgr.person_ref = mpos.person_ref
+                         AND mpos.contact_status IN(SELECT [value]
+                                                    FROM #p7m_vars
+                                                    WHERE [key] = 'contact_contact_status_code')
+                         AND mpos.record_status IN(SELECT [value]
+                                                   FROM #p7m_vars
+                                                   WHERE [key] = 'contact_record_status_code')
+      LEFT OUTER JOIN address a ON pos.address_ref = a.address_ref
+      LEFT OUTER JOIN #p7m_vars rs ON org.record_status = rs.[value]
+                                  AND rs.[key] ='client_employer_only_record_status_code'
+    WHERE pos.organisation_ref IN(SELECT client_id FROM #p7m_clients)
+      AND pos.person_ref IN(SELECT candidate_id FROM #p7m_candidates);
+
+    CREATE INDEX candidate_prev_assign_idx ON #p7m_candidate_prev_assign (candidate_id);
+
+    CALL write_csv('candidate_prev_assign', csv_file_path);
+
+----------------------------------------------------------------------------
+-- Load data for CONTACT_PREV_ASSIGN.CSV
+
+    CALL logger('Load CCONTACT_PREV_ASSIGN', log_file_path);
+
+    SELECT
+      pos.position_ref AS [prev_assign_id]
+      ,pos.position_ref AS [candidate_id]
+      ,pos.create_timestamp AS [createddate]
+      ,pos.create_user AS [created_by]
+      ,GETDATE() AS [updateddate]
+      ,pos.update_user AS [updated_by]
+      ,pe.income AS [salary]
+      ,pos.record_status AS [status]
+      ,pos.start_date AS [start_date]
+      ,pos.end_date AS [end_date]
+      ,pos.displayname AS [job_title]
+      ,pos.type AS [assig_type]
+      ,org.displayname AS [prev_co]
+      ,org.organisation_ref AS prev_co_id
+      ,mgr.displayname AS [prv_manager]
+      ,mpos.position_ref AS prv_manager_id
+      ,ISNULL(mpos.telephone_number, a.telephone_number) AS [prv_man_tel]
+      ,REPLACE(REPLACE(pos.notes, '\x0d', ' '), '\x0a', ' ') AS [notes]
+      ,te.hours_details AS [pay_rate]
+      ,ISNULL(s.team, pos.responsible_team) AS [office]
+    INTO #p7m_contact_prev_assign
+    FROM position pos
+      INNER JOIN person per ON pos.person_ref = per.person_ref
+      LEFT OUTER JOIN person_type pt ON pos.person_ref = per.person_ref AND pt.type LIKE 'Z%'
+      LEFT OUTER JOIN staff s ON pt.person_type_ref = s.person_type_ref
+      LEFT OUTER JOIN permanent_emp pe ON pos.position_ref = pe.position_ref
+      LEFT OUTER JOIN temporary_emp te ON pos.position_ref = te.position_ref
+      LEFT OUTER JOIN organisation org ON pos.organisation_ref = org.organisation_ref
+      LEFT OUTER JOIN person mgr ON pos.manager_person_ref = mgr.person_ref
+      LEFT OUTER JOIN position mpos ON mgr.person_ref = mpos.person_ref
+                         AND mpos.contact_status IN(SELECT [value]
+                                                    FROM #p7m_vars
+                                                    WHERE [key] = 'contact_contact_status_code')
+                         AND mpos.record_status IN(SELECT [value]
+                                                   FROM #p7m_vars
+                                                   WHERE [key] = 'contact_record_status_code')
+      LEFT OUTER JOIN address a ON pos.address_ref = a.address_ref
+    WHERE pos.organisation_ref IN(SELECT client_id FROM #p7m_clients)
+      AND pos.position_ref IN(SELECT contact_id FROM #p7m_contacts);
+
+    CREATE INDEX contact_prev_assign_idx ON #p7m_contact_prev_assign (candidate_id);
+
+    CALL write_csv('contact_prev_assign', csv_file_path);
+
+----------------------------------------------------------------------------
 -- Load data for X_PA_CLIENT.CSV
 
     CALL logger('Load X_PA_CLIENT', log_file_path);
@@ -1602,16 +1657,32 @@ journal_client_visit_type=P14
 
     SELECT
       IDENTITY(10) AS [id]
-      ,organisation_ref AS [client]
-      ,parent_organ_ref AS [parent]
+      ,client_id AS [client]
+      ,parent_id AS [parent]
     INTO #p7m_x_client_sub
-    FROM organisation
-    WHERE parent_organ_ref IS NOT NULL
-      AND organisation_ref IN(SELECT organisation_ref FROM #client_list);
+    FROM #p7m_clients
+    WHERE parent_id IS NOT NULL;
 
     CALL write_csv('x_client_sub', csv_file_path);
 
     DROP TABLE #p7m_x_client_sub;
+
+----------------------------------------------------------------------------
+-- Load data for X_LE_CLIENT.CSV
+
+    CALL logger('Load X_LE_CLIENT', log_file_path);
+
+    SELECT
+      IDENTITY(10) AS [id]
+      ,le_id AS [le]
+      ,client_id AS [client]
+    INTO #p7m_x_le_client
+    FROM #p7m_clients
+    WHERE parent_id IS NOT NULL;
+
+    CALL write_csv('x_client_sub', csv_file_path);
+
+    DROP TABLE #p7m_x_le_client;
 
 ----------------------------------------------------------------------------
 -- Load data for PERM_ASSIGN.CSV
@@ -1948,18 +2019,20 @@ journal_client_visit_type=P14
       LEFT OUTER JOIN event_role con ON e.event_ref = con.event_ref
                                     AND con.type = 'C1'
       LEFT OUTER JOIN event_role cons ON e.event_ref = cons.event_ref
-                                    AND cons.type = 'U1'
+                                     AND cons.type = 'U1'
       LEFT OUTER JOIN #p7m_contacts c ON con.person_ref = c.person_id
     WHERE lu.code_type = 123
       AND jc.[key] IN('journal_general_type', 'journal_send_email_type',
-                      'journal_call_made_log_type','journal_client_visit_type')
+                      'journal_call_made_log_type','journal_client_visit_type',
+                      'journal_internal_interview_arranged_type')
       AND (e.organisation_ref IS NULL OR
            e.organisation_ref IN(SELECT client_id FROM #p7m_clients))
       AND (can.person_ref IS NULL OR
            can.person_ref IN(SELECT candidate_id FROM #p7m_candidates))
       AND (e.opportunity_ref IS NULL OR
            e.opportunity_ref IN(SELECT job_id FROM #p7m_contract_jobs) OR
-           e.opportunity_ref IN(SELECT job_id FROM #p7m_perm_jobs));
+           e.opportunity_ref IN(SELECT job_id FROM #p7m_perm_jobs))
+      AND ISNULL(e.organisation_ref, ISNULL(e.opportunity_ref, can.person_ref)) IS NOT NULL;
 
     SELECT
       CAST(NULL AS INT) AS [journal_id]
@@ -2108,6 +2181,25 @@ journal_client_visit_type=P14
     WHERE journal_type = 'journal_client_visit_type';
 
     CALL write_csv('client_visit_arranged_journals', csv_file_path);
+
+    DROP TABLE #p7m_client_visit_arranged_journals;
+
+    CALL logger('Load INTERNAL_INTERVIEW_ARRANGED_JOURNALS',log_file_path);
+
+    SELECT
+      [journal_id]
+      ,[datetime]
+      ,[consultant]
+      ,[candidate]
+      ,[contact]
+      ,[client]
+      ,[job]
+      ,[notes]
+    INTO #p7m_internal_interview_arranged_journals
+    FROM #journals
+    WHERE journal_type = 'journal_interal_interview_arranged_type';
+
+    CALL write_csv('internal_interview_arranged_journals', csv_file_path);
 
     DROP TABLE #p7m_client_visit_arranged_journals;
 
