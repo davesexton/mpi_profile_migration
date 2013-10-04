@@ -31,7 +31,7 @@ contact_tracking_consultant_code_type=1055
 contact_record_status_code=C
 contact_contact_status_code=2,3,6
 job_close_reason_type=X2,X3,X4
-job_comprtitor_type=X3
+job_competitor_type=X3
 job_contact_fee_event_type=1FA
 job_contract_type=E
 job_education_code_type=1020
@@ -357,32 +357,32 @@ journal_internal_interview_arranged_type=Q13,Q15
       'document_id,document_path,document_type,entity_reference,' ||
       'document_ext,document_description');
 
---    UPDATE #p7m_meta
---    SET cname = REPLACE(cname, 'perm_team,', '');
---
---    UPDATE #p7m_meta
---    SET cname = REPLACE(cname, 'contract_team,', '');
---
---    UPDATE #p7m_meta
---    SET cname = REPLACE(cname, 'team,', '');
---
---    UPDATE #p7m_meta
---    SET cname = REPLACE(cname, 'close_reason,', '');
---
---    UPDATE #p7m_meta
---    SET cname = REPLACE(cname, 'lead,', '');
---
---    UPDATE #p7m_meta
---    SET cname = REPLACE(cname, 'competitor,', '');
---
---    UPDATE #p7m_meta
---    SET cname = REPLACE(cname, 'internal,', '');
---
---    UPDATE #p7m_meta
---    SET cname = REPLACE(cname, 'progress,accepted_by,acc_off_date,acc_off_time', '');
---
---    DELETE FROM #p7m_meta
---    WHERE tname IN('perm_lead_jobs', 'contract_lead_jobs');
+    UPDATE #p7m_meta
+    SET cname = REPLACE(cname, 'perm_team,', '');
+
+    UPDATE #p7m_meta
+    SET cname = REPLACE(cname, 'contract_team,', '');
+
+    UPDATE #p7m_meta
+    SET cname = REPLACE(cname, 'team,', '');
+
+    UPDATE #p7m_meta
+    SET cname = REPLACE(cname, 'close_reason,', '');
+
+    UPDATE #p7m_meta
+    SET cname = REPLACE(cname, 'lead,', '');
+
+    UPDATE #p7m_meta
+    SET cname = REPLACE(cname, 'competitor,', '');
+
+    UPDATE #p7m_meta
+    SET cname = REPLACE(cname, 'internal,', '');
+
+    UPDATE #p7m_meta
+    SET cname = REPLACE(cname, ',progress,accepted_by,acc_off_date,acc_off_time', '');
+
+    DELETE FROM #p7m_meta
+    WHERE tname IN('perm_lead_jobs', 'contract_lead_jobs');
 
 ----------------------------------------------------------------------------
 -- Load data for X_CLIENT_CON.CSV
@@ -1680,7 +1680,7 @@ journal_internal_interview_arranged_type=Q13,Q15
     FROM #p7m_clients
     WHERE parent_id IS NOT NULL;
 
-    CALL write_csv('x_client_sub', csv_file_path);
+    CALL write_csv('x_le_client', csv_file_path);
 
     DROP TABLE #p7m_x_le_client;
 
@@ -2201,7 +2201,7 @@ journal_internal_interview_arranged_type=Q13,Q15
 
     CALL write_csv('internal_interview_arranged_journals', csv_file_path);
 
-    DROP TABLE #p7m_client_visit_arranged_journals;
+    DROP TABLE #p7m_internal_interview_arranged_journals;
 
 ----------------------------------------------------------------------------
 
@@ -2299,58 +2299,6 @@ journal_internal_interview_arranged_type=Q13,Q15
                   WHERE l.parent_object_ref = candidate_id);
 
     CALL write_csv('documents', csv_file_path);
-
-----------------------------------------------------------------------------
--- Output CSV files
-
---    CALL logger('Output CSV files', log_file_path);
---
---    BEGIN
---
---      DECLARE v_csv VARCHAR(8000);
---
---      DECLARE c_csv CURSOR FOR
---
---         SELECT
---          'UNLOAD SELECT ''"' || REPLACE(UPPER(cname), ',', '","') || '"'''
---          || ' UNION ALL SELECT ''"''||REPLACE(TRIM('
---          || REPLACE(cname, ',', '),''"'',''""'')||''","''||REPLACE(TRIM(')
---          || '),''"'',''""'')||''"'''
---          || ' FROM #p7m_'
---          || tname
---          || ' TO ''' || csv_file_path
---          || tname
---          || '.csv'' FORMAT ASCII QUOTES off ESCAPES off'
---        FROM #p7m_meta
---        UNION ALL
---        SELECT
---          'UNLOAD SELECT TOP 2000 ''"'
---          || zip_exe_path
---          || '" a -tzip "'
---          || csv_file_path
---          || 'documents.zip" "'' || document_path || ''"'' '
---          || ' FROM #p7m_documents'
---          || ' TO ''' || csv_file_path
---          || 'documents.bat'' '
---          || ' FORMAT ASCII QUOTES off ESCAPES off';
---
---      OPEN c_csv;
---
---      FETCH c_csv INTO v_csv;
---
---      WHILE SQLCODE = 0 LOOP
---
---        EXECUTE (v_csv);
---
---        FETCH c_csv INTO v_csv;
---
---      END LOOP;
---
---      CLOSE c_csv;
---
---      DEALLOCATE c_csv;
---
---    END;
 
 ----------------------------------------------------------------------------
 -- Create Documents Zip
