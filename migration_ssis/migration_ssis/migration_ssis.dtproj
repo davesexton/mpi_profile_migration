@@ -28,8 +28,13 @@
   </Configurations>
   <DTSPackages>
     <DtsPackage FormatVersion="3">
-      <Name>Package.dtsx</Name>
-      <FullPath>Package.dtsx</FullPath>
+      <Name>migration.dtsx</Name>
+      <FullPath>migration.dtsx</FullPath>
+      <References />
+    </DtsPackage>
+    <DtsPackage FormatVersion="3">
+      <Name>copydata.dtsx</Name>
+      <FullPath>copydata.dtsx</FullPath>
       <References />
     </DtsPackage>
   </DTSPackages>

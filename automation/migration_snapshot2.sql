@@ -18,7 +18,7 @@ candidate_location_code_type=1015
 candidate_qualification_code_type=1025,1020
 candidate_skill_code_type=1007,1010,1011,1012,1014,1016,1017,1018,1055
 candidate_tracking_consultant_code_type=1055
-client_contact_role_type=C1
+job_contact_role_type=C1
 client_employer_only_record_status_code=Y
 client_industry_code_type=1005
 client_location_code_type=1015
@@ -47,6 +47,19 @@ journal_send_email_type=KE01,P05,KA2
 journal_call_made_log_type=P11,KD2
 journal_client_visit_type=P14
 journal_internal_interview_arranged_type=Q13,Q15
+shortlist_cv_event_type=KE03,Q21
+shortlist_interview_event_type=Q31,Q32,Q33,Q34,Q35,Q36
+shortlist_offer_event_type=F,H
+shortlist_shortlisted_event_type=A
+interview_external_event_type=Q31,Q32,Q33,Q34,Q35,Q36
+interview_internal_event_type=Q13,Q15
+event_role_candidate_type=A,1,D,F,H,K
+event_role_contact_type=C1
+event_role_consultant_type=U1
+perm_assign_perm_offer_event_type=F
+perm_assign_perm_fee_event_type=1PA
+perm_assign_placed_event_outcome=F3
+perm_assign_deleted_event_outcome=DEL
 ';
 
   BEGIN
@@ -203,14 +216,14 @@ journal_internal_interview_arranged_type=Q13,Q15
     INSERT INTO #p7m_meta VALUES('perm_jobs',
       'job_id,createddate,created_by,updateddate,updated_by,street1,street2,locality,' ||
       'town,county,post_code,country,status,job_title,start_dt,job_src,job_type,' ||
-      'closed_dt,location_cd,cons1,cons1_perc,close_reason,lead,competitor,filled_dt,' ||
+      'closed_dt,location_cd,close_reason,lead,competitor,filled_dt,' ||
       'consultant,team,office,fee_perc,sal_from,sal_to,fixed_term,open_since,educ_level,' ||
       'no_req,personal_attributes');
 
     INSERT INTO #p7m_meta VALUES('contract_lead_jobs',
       'job_id,createddate,created_by,updateddate,updated_by,street1,street2,locality,' ||
       'town,county,post_code,country,no_req,std_hours,pay_period,chrg_rate,pay_rate,' ||
-      'status,job_title,start_dt,job_src,job_type,location_cd,cons1,cons1_perc,' ||
+      'status,job_title,start_dt,job_src,job_type,location_cd,' ||
       'close_reason,lead,filled_dt,consultant,team,office,personal_attributes');
 
     INSERT INTO #p7m_meta VALUES('perm_lead_jobs',
@@ -357,32 +370,32 @@ journal_internal_interview_arranged_type=Q13,Q15
       'document_id,document_path,document_type,entity_reference,' ||
       'document_ext,document_description');
 
-    UPDATE #p7m_meta
-    SET cname = REPLACE(cname, 'perm_team,', '');
-
-    UPDATE #p7m_meta
-    SET cname = REPLACE(cname, 'contract_team,', '');
-
-    UPDATE #p7m_meta
-    SET cname = REPLACE(cname, 'team,', '');
-
-    UPDATE #p7m_meta
-    SET cname = REPLACE(cname, 'close_reason,', '');
-
-    UPDATE #p7m_meta
-    SET cname = REPLACE(cname, 'lead,', '');
-
-    UPDATE #p7m_meta
-    SET cname = REPLACE(cname, 'competitor,', '');
-
-    UPDATE #p7m_meta
-    SET cname = REPLACE(cname, 'internal,', '');
-
-    UPDATE #p7m_meta
-    SET cname = REPLACE(cname, ',progress,accepted_by,acc_off_date,acc_off_time', '');
-
-    DELETE FROM #p7m_meta
-    WHERE tname IN('perm_lead_jobs', 'contract_lead_jobs');
+--    UPDATE #p7m_meta
+--    SET cname = REPLACE(cname, 'perm_team,', '');
+--
+--    UPDATE #p7m_meta
+--    SET cname = REPLACE(cname, 'contract_team,', '');
+--
+--    UPDATE #p7m_meta
+--    SET cname = REPLACE(cname, 'team,', '');
+--
+--    UPDATE #p7m_meta
+--    SET cname = REPLACE(cname, 'close_reason,', '');
+--
+--    UPDATE #p7m_meta
+--    SET cname = REPLACE(cname, 'lead,', '');
+--
+--    UPDATE #p7m_meta
+--    SET cname = REPLACE(cname, 'competitor,', '');
+--
+--    UPDATE #p7m_meta
+--    SET cname = REPLACE(cname, 'internal,', '');
+--
+--    UPDATE #p7m_meta
+--    SET cname = REPLACE(cname, ',progress,accepted_by,acc_off_date,acc_off_time', '');
+--
+--    DELETE FROM #p7m_meta
+--    WHERE tname IN('perm_lead_jobs', 'contract_lead_jobs');
 
 ----------------------------------------------------------------------------
 -- Load data for X_CLIENT_CON.CSV
@@ -736,7 +749,7 @@ journal_internal_interview_arranged_type=Q13,Q15
     WHERE EXISTS (SELECT 1
                   FROM #p7m_vars
                   WHERE rl.role_type = [value]
-                    AND [key] = 'client_contact_role_type')
+                    AND [key] = 'job_contact_role_type')
       AND EXISTS (SELECT 1
                   FROM #client_list c
                   WHERE o.organisation_ref = c.organisation_ref)
@@ -830,7 +843,7 @@ journal_internal_interview_arranged_type=Q13,Q15
     UPDATE #p7m_contract_jobs
     SET lead = 'Y'
     WHERE close_reason IN(SELECT [value]
-                          FROM #p7m_vars WHERE [key] = 'job_lead_record_status_type');
+                          FROM #p7m_vars WHERE [key] = 'job_lead_record_status_code');
 
     UPDATE #p7m_contract_jobs
     SET close_reason = NULL
@@ -1001,7 +1014,7 @@ journal_internal_interview_arranged_type=Q13,Q15
     UPDATE #p7m_perm_jobs
     SET lead = 'Y'
     WHERE close_reason IN(SELECT [value]
-                          FROM #p7m_vars WHERE [key] = 'job_lead_record_status_type');
+                          FROM #p7m_vars WHERE [key] = 'job_lead_record_status_code');
 
     UPDATE #p7m_perm_jobs
     SET close_reason = NULL
@@ -1220,7 +1233,7 @@ journal_internal_interview_arranged_type=Q13,Q15
       INNER JOIN #shortlist_dates fle ON e.opportunity_ref = fle.opportunity_ref
                                      AND can.person_ref = fle.person_ref
     WHERE e.type IN('A', 'F', 'H', 'KE03', 'Q21', 'Q31', 'Q32', 'Q33', 'Q34', 'Q35', 'Q36')
-      AND can.type IN('A1', 'D', 'F', 'H', 'K')
+      AND can.type IN('A', '1', 'D', 'F', 'H', 'K')
       AND con.type IN('C1')
       AND cons.type IN('UC1')
     GROUP BY
@@ -1399,6 +1412,9 @@ journal_internal_interview_arranged_type=Q13,Q15
       INNER JOIN staff s ON sc.code = s.resp_user_code
       INNER JOIN person_type pt ON pt.person_type_ref = s.person_type_ref
     WHERE search_type = 1
+      AND code_type = 1055
+      AND code_type IN(SELECT [value_int]
+                       FROM #p7m_vars WHERE [key] = 'candidate_tracking_consultant_code_type');
       AND pt.type LIKE 'Z%';
 
     CALL write_csv('candidates', csv_file_path);
@@ -1924,7 +1940,7 @@ journal_internal_interview_arranged_type=Q13,Q15
       INNER JOIN event_role er_cons ON e.event_ref = er_cons.event_ref
       LEFT OUTER JOIN address a ON con.address_ref = a.address_ref
     WHERE e.type IN('Q13','Q15','Q31','Q32','Q33','Q34','Q35','Q36')
-      AND er_can.type IN('A1','D','F','H','K')
+      AND er_can.type IN('A','1','D','F','H','K')
       AND er_con.type IN('C1')
       AND er_cons.type IN('U1')
       AND EXISTS (SELECT 1
@@ -2049,7 +2065,7 @@ journal_internal_interview_arranged_type=Q13,Q15
       AND ISNULL(candidate, ISNULL(contact, ISNULL(client, job))) IS NOT NULL;
 
     INSERT INTO #p7m_general_journals
-    SELECT
+    SELECT DISTINCT
       NULL AS [journal_id]
       ,GETDATE() AS [datetime]
       ,NULL AS [consultant]
@@ -2063,7 +2079,7 @@ journal_internal_interview_arranged_type=Q13,Q15
       AND candidate IS NOT NULL;
 
     INSERT INTO #p7m_general_journals
-    SELECT
+    SELECT DISTINCT
       NULL AS [journal_id]
       ,GETDATE() AS [datetime]
       ,NULL AS [consultant]
@@ -2077,7 +2093,7 @@ journal_internal_interview_arranged_type=Q13,Q15
       AND contact IS NOT NULL;
 
     INSERT INTO #p7m_general_journals
-    SELECT
+    SELECT DISTINCT
       NULL AS [journal_id]
       ,GETDATE() AS [datetime]
       ,NULL AS [consultant]
@@ -2091,7 +2107,7 @@ journal_internal_interview_arranged_type=Q13,Q15
       AND client IS NOT NULL;
 
     INSERT INTO #p7m_general_journals
-    SELECT
+    SELECT DISTINCT
       NULL AS [journal_id]
       ,GETDATE() AS [datetime]
       ,NULL AS [consultant]
@@ -2234,7 +2250,7 @@ journal_internal_interview_arranged_type=Q13,Q15
     FROM #p7m_contract_jobs
     WHERE lead = 'Y';
 
-    DELETE #p7m_perm_jobs
+    DELETE #p7m_contract_jobs
     WHERE lead = 'Y';
 
     CALL write_csv('contract_jobs', csv_file_path);
