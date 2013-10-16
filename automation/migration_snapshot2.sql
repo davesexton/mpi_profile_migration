@@ -5,8 +5,8 @@ BEGIN
   SET var_text = '
 teams=BKCH,CMCH,CMIC,MSCH,PSCH,DUMMY,SITL,SLEM,VDPL
 zip_exe_path=C:\Documents and Settings\davesexton\Desktop\migration\bin\7za.exe
-csv_file_path=C:\Documents and Settings\davesexton\Desktop\migration\
-csv_file_pathx=s:\mig\
+csv_file_pathx=C:\Documents and Settings\davesexton\Desktop\migration\
+csv_file_path=c:\migration\
 migration_team=XXXX
 migration_user=0
 candidate_education_code_type=1020
@@ -42,11 +42,11 @@ job_location_code_type=1015
 job_perm_type=C,CR
 job_qualification_code_type=1025,1020
 job_skill_code_type=1007,1010,1011,1012,1014,1016,1017,1018,1008,1036,1039,1041,1030
-journal_general_type=Q11,Q14,P15,KA1,G,P13
-journal_send_email_type=KE01,P05,KA2
-journal_call_made_log_type=P11,KD2
-journal_client_visit_type=P14
-journal_internal_interview_arranged_type=Q13,Q15
+journal_general_event_type=Q11,Q14,P15,KA1,G,P13
+journal_send_email_event_type=KE01,P05,KA2
+journal_call_made_log_event_type=P11,KD2
+journal_client_visit_event_type=P14
+journal_internal_interview_arranged_event_type=Q13,Q15
 shortlist_cv_event_type=KE03,Q21
 shortlist_interview_event_type=Q31,Q32,Q33,Q34,Q35,Q36
 shortlist_offer_event_type=F,H
@@ -370,32 +370,32 @@ perm_assign_deleted_event_outcome=DEL
       'document_id,document_path,document_type,entity_reference,' ||
       'document_ext,document_description');
 
---    UPDATE #p7m_meta
---    SET cname = REPLACE(cname, 'perm_team,', '');
---
---    UPDATE #p7m_meta
---    SET cname = REPLACE(cname, 'contract_team,', '');
---
---    UPDATE #p7m_meta
---    SET cname = REPLACE(cname, 'team,', '');
---
---    UPDATE #p7m_meta
---    SET cname = REPLACE(cname, 'close_reason,', '');
---
---    UPDATE #p7m_meta
---    SET cname = REPLACE(cname, 'lead,', '');
---
---    UPDATE #p7m_meta
---    SET cname = REPLACE(cname, 'competitor,', '');
---
---    UPDATE #p7m_meta
---    SET cname = REPLACE(cname, 'internal,', '');
---
---    UPDATE #p7m_meta
---    SET cname = REPLACE(cname, ',progress,accepted_by,acc_off_date,acc_off_time', '');
---
---    DELETE FROM #p7m_meta
---    WHERE tname IN('perm_lead_jobs', 'contract_lead_jobs');
+    UPDATE #p7m_meta
+    SET cname = REPLACE(cname, 'perm_team,', '');
+
+    UPDATE #p7m_meta
+    SET cname = REPLACE(cname, 'contract_team,', '');
+
+    UPDATE #p7m_meta
+    SET cname = REPLACE(cname, 'team,', '');
+
+    UPDATE #p7m_meta
+    SET cname = REPLACE(cname, 'close_reason,', '');
+
+    UPDATE #p7m_meta
+    SET cname = REPLACE(cname, 'lead,', '');
+
+    UPDATE #p7m_meta
+    SET cname = REPLACE(cname, 'competitor,', '');
+
+    UPDATE #p7m_meta
+    SET cname = REPLACE(cname, 'internal,', '');
+
+    UPDATE #p7m_meta
+    SET cname = REPLACE(cname, ',progress,accepted_by,acc_off_date,acc_off_time', '');
+
+    DELETE FROM #p7m_meta
+    WHERE tname IN('perm_lead_jobs', 'contract_lead_jobs');
 
 ----------------------------------------------------------------------------
 -- Load data for X_CLIENT_CON.CSV
@@ -1293,11 +1293,10 @@ perm_assign_deleted_event_outcome=DEL
             END AS [not_period]
       ,CASE per.own_car WHEN 'Y' THEN 'Y' ELSE NULL END AS [own_trans]
       ,CAST(NULL AS CHAR(4)) AS [high_edu_lev]
-      ,CASE WHEN ptp.type IS NOT NULL AND ptc.type IS NOT NULL
-            THEN CASE WHEN canc.income_required IS NOT NULL
-                      THEN ptc.type
-                      ELSE ptp.type END
-            ELSE ISNULL(ptp.type, ptc.type)
+      ,CASE WHEN ptp.type IS NOT NULL
+            THEN ptp.type
+            WHEN ptc.type IS NOT NULL
+            THEN ptc.type
             END AS [def_role]
       ,ISNULL(canp.date_available, canc.date_available) AS [avail_from]
       ,per.user_date1 AS [visa_exp]
@@ -1305,11 +1304,12 @@ perm_assign_deleted_event_outcome=DEL
       ,per.nationality AS [visa_type]
       ,CASE per.sole_agency WHEN 'Y' THEN 'Y' ELSE NULL END AS [ex_clusive]
       ,CASE per.do_not_mailshot WHEN 'Y' THEN 'N' ELSE 'Y' END AS [e_shot]
-      ,CASE WHEN ptp.type IS NOT NULL AND ptc.type IS NOT NULL
-            THEN CASE WHEN canc.income_required IS NOT NULL
-                      THEN ptc.type || ', ' || ptp.type
-                      ELSE ptp.type END
-            ELSE ISNULL(ptp.type, ptc.type)
+      ,CASE WHEN ptp.type IS NOT NULL AND ptc.type IS NOT NULL AND canc.income_required IS NOT NULL
+            THEN ptc.type || ', ' || ptp.type
+            WHEN ptp.type IS NOT NULL
+            THEN ptp.type
+            WHEN ptc.type IS NOT NULL
+            THEN ptc.type
             END AS [cand_type]
       ,CASE canc.part_time WHEN 'Y' THEN 'Y' ELSE NULL END AS [part_time]
       ,canc.income_required AS [rate_req]
@@ -1318,7 +1318,9 @@ perm_assign_deleted_event_outcome=DEL
       ,CASE WHEN ptp.type IS NOT NULL
             THEN 'Y'
             END AS [p_perm]
-      ,CASE WHEN ptc.type IS NOT NULL AND canc.income_required IS NOT NULL
+      ,CASE WHEN ptp.type IS NOT NULL AND ptc.type IS NOT NULL AND canc.income_required IS NULL
+            THEN NULL
+            WHEN ptc.type IS NOT NULL
             THEN 'Y'
             END AS [p_contr]
       ,CASE per.discretion_reqd WHEN 'Y' THEN 'Y' ELSE NULL END AS [relocate]
@@ -1415,7 +1417,6 @@ perm_assign_deleted_event_outcome=DEL
       AND code_type = 1055
       AND code_type IN(SELECT [value_int]
                        FROM #p7m_vars WHERE [key] = 'candidate_tracking_consultant_code_type');
-      AND pt.type LIKE 'Z%';
 
     CALL write_csv('candidates', csv_file_path);
 
@@ -1553,12 +1554,10 @@ perm_assign_deleted_event_outcome=DEL
       ,ISNULL(mpos.telephone_number, a.telephone_number) AS [prv_man_tel]
       ,REPLACE(REPLACE(pos.notes, '\x0d', ' '), '\x0a', ' ') AS [notes]
       ,te.hours_details AS [pay_rate]
-      ,ISNULL(s.team, pos.responsible_team) AS [office]
+      ,pos.responsible_team AS [office]
     INTO #p7m_candidate_prev_assign
     FROM position pos
       INNER JOIN person per ON pos.person_ref = per.person_ref
-      LEFT OUTER JOIN person_type pt ON pos.person_ref = per.person_ref AND pt.type LIKE 'Z%'
-      LEFT OUTER JOIN staff s ON pt.person_type_ref = s.person_type_ref
       LEFT OUTER JOIN permanent_emp pe ON pos.position_ref = pe.position_ref
       LEFT OUTER JOIN temporary_emp te ON pos.position_ref = te.position_ref
       LEFT OUTER JOIN organisation org ON pos.organisation_ref = org.organisation_ref
@@ -2038,9 +2037,9 @@ perm_assign_deleted_event_outcome=DEL
                                      AND cons.type = 'U1'
       LEFT OUTER JOIN #p7m_contacts c ON con.person_ref = c.person_id
     WHERE lu.code_type = 123
-      AND jc.[key] IN('journal_general_type', 'journal_send_email_type',
-                      'journal_call_made_log_type','journal_client_visit_type',
-                      'journal_internal_interview_arranged_type')
+      AND jc.[key] IN('journal_general_event_type', 'journal_send_email_event_type',
+                      'journal_call_made_log_event_type','journal_client_visit_event_type',
+                      'journal_internal_interview_arranged_event_type')
       AND (e.organisation_ref IS NULL OR
            e.organisation_ref IN(SELECT client_id FROM #p7m_clients))
       AND (can.person_ref IS NULL OR
@@ -2061,7 +2060,7 @@ perm_assign_deleted_event_outcome=DEL
       ,[notes]
     INTO #p7m_general_journals
     FROM #journals
-    WHERE journal_type = 'journal_general_type'
+    WHERE journal_type = 'journal_general_event_type'
       AND ISNULL(candidate, ISNULL(contact, ISNULL(client, job))) IS NOT NULL;
 
     INSERT INTO #p7m_general_journals
@@ -2075,7 +2074,7 @@ perm_assign_deleted_event_outcome=DEL
       ,NULL AS [job]
       ,'P7 Candidate Ref: ' || candidate AS [notes]
     FROM #journals
-    WHERE journal_type = 'journal_general_type'
+    WHERE journal_type = 'journal_general_event_type'
       AND candidate IS NOT NULL;
 
     INSERT INTO #p7m_general_journals
@@ -2089,7 +2088,7 @@ perm_assign_deleted_event_outcome=DEL
       ,NULL AS [job]
       ,'P7 Contact Ref: ' || person AS [notes]
     FROM #journals
-    WHERE journal_type = 'journal_general_type'
+    WHERE journal_type = 'journal_general_event_type'
       AND contact IS NOT NULL;
 
     INSERT INTO #p7m_general_journals
@@ -2103,7 +2102,7 @@ perm_assign_deleted_event_outcome=DEL
       ,NULL AS [job]
       ,'P7 Organisation Ref: ' || client AS [notes]
     FROM #journals
-    WHERE journal_type = 'journal_general_type'
+    WHERE journal_type = 'journal_general_event_type'
       AND client IS NOT NULL;
 
     INSERT INTO #p7m_general_journals
@@ -2117,7 +2116,7 @@ perm_assign_deleted_event_outcome=DEL
       ,[job]
       ,'P7 Opportunity Ref: ' || job AS [notes]
     FROM #journals
-    WHERE journal_type = 'journal_general_type'
+    WHERE journal_type = 'journal_general_event_type'
       AND job IS NOT NULL;
 
     UPDATE #p7m_general_journals
@@ -2136,7 +2135,7 @@ perm_assign_deleted_event_outcome=DEL
       ,[notes]
     INTO #p7m_send_email_journals
     FROM #journals
-    WHERE journal_type = 'journal_send_email_type';
+    WHERE journal_type = 'journal_send_email_event_type';
 
     CALL write_csv('send_email_journals', csv_file_path);
 
@@ -2155,7 +2154,7 @@ perm_assign_deleted_event_outcome=DEL
       ,[notes]
     INTO #p7m_call_made_log_journals
     FROM #journals
-    WHERE journal_type = 'journal_call_made_log_type';
+    WHERE journal_type = 'journal_call_made_log_event_type';
 
     CALL write_csv('call_made_log_journals', csv_file_path);
 
@@ -2174,7 +2173,7 @@ perm_assign_deleted_event_outcome=DEL
       ,[notes]
     INTO #p7m_client_visit_attended_journals
     FROM #journals
-    WHERE journal_type = 'journal_client_visit_type'
+    WHERE journal_type = 'journal_client_visit_event_type'
       AND outcome IS NOT NULL;
 
     CALL write_csv('client_visit_attended_journals', csv_file_path);
@@ -2194,7 +2193,7 @@ perm_assign_deleted_event_outcome=DEL
       ,[notes]
     INTO #p7m_client_visit_arranged_journals
     FROM #journals
-    WHERE journal_type = 'journal_client_visit_type';
+    WHERE journal_type = 'journal_client_visit_event_type';
 
     CALL write_csv('client_visit_arranged_journals', csv_file_path);
 
@@ -2213,7 +2212,7 @@ perm_assign_deleted_event_outcome=DEL
       ,[notes]
     INTO #p7m_internal_interview_arranged_journals
     FROM #journals
-    WHERE journal_type = 'journal_interal_interview_arranged_type';
+    WHERE journal_type = 'journal_internal_interview_arranged_event_type';
 
     CALL write_csv('internal_interview_arranged_journals', csv_file_path);
 
