@@ -401,34 +401,219 @@ perm_assign_deleted_event_outcome=DEL
     WHERE tname IN('perm_lead_jobs', 'contract_lead_jobs');
 
 ----------------------------------------------------------------------------
+-- Load selection data
+
+    SELECT 'BKB2' AS team INTO #teams;
+    INSERT INTO #teams VALUES('BKBI');
+    INSERT INTO #teams VALUES('BKBS');
+    INSERT INTO #teams VALUES('CMBS');
+    INSERT INTO #teams VALUES('CMIB');
+    INSERT INTO #teams VALUES('ENBS');
+    INSERT INTO #teams VALUES('MSBS');
+    INSERT INTO #teams VALUES('PSBS');
+    INSERT INTO #teams VALUES('SBBS');
+    INSERT INTO #teams VALUES('SOBS');
+
+    SELECT 'NMAB' AS location INTO #locations;
+    INSERT INTO #locations VALUES('NMAC');
+    INSERT INTO #locations VALUES('NMAM');
+    INSERT INTO #locations VALUES('NMAN');
+    INSERT INTO #locations VALUES('NME');
+
+
+--    SELECT
+--      person_ref
+--      ,CAST(NULL AS INT) AS linked_job
+--    INTO #candidates_stage
+--    FROM
+--      person
+--    WHERE responsible_team IN(SELECT team FROM #teams);
+
+--    INSERT INTO #candidates_stage
+--    SELECT DISTINCT
+--      person_ref
+--      ,CAST(NULL AS INT) AS linked_job
+--    FROM search_code
+--    WHERE search_type = 1
+--      AND code_type = 1015
+--      AND code IN(SELECT location FROM #locations);
+--
+--    INSERT INTO #candidates_stage
+--    SELECT
+--      sc.person_ref
+--      ,CAST(NULL AS INT) AS linked_job
+--    FROM search_code sc
+--      INNER JOIN staff s ON sc.code = s.resp_user_code
+--    WHERE s.team IN(SELECT team FROM #teams)
+--      AND sc.search_type = 1
+--      AND sc.code_type = 1055;
+
+
+    SELECT
+      er.person_ref
+      ,e.opportunity_ref AS linked_job
+    INTO #candidates_stage
+    FROM event_role er
+      INNER JOIN event e ON er.event_ref = e.event_ref
+    WHERE er.type IN('A', '1', 'D', 'F', 'H', 'K')
+      AND er.person_ref IS NOT NULL
+      AND EXISTS (SELECT 1
+                  FROM event_role ru
+                  WHERE ru.team IN(SELECT team FROM #teams)
+                    AND ru.event_ref = er.event_ref)
+      AND CASE WHEN e.opportunity_ref IS NULL AND e.event_date > DATEADD(YEAR, -2, GETDATE())
+               THEN 1 ELSE 0 END = 0
+    ;
+
+    DELETE
+    FROM #candidates_stage
+    WHERE person_ref NOT IN(SELECT person_ref
+                            FROM person_type
+                            WHERE type IN('A', 'C'));
+
+    SELECT
+      opportunity_ref
+      ,organisation_ref
+    INTO #jobs_stage
+    FROM opportunity
+    WHERE responsible_team IN(SELECT team FROM #teams);
+
+    INSERT INTO #jobs_stage
+    SELECT
+      linked_job
+      ,organisation_ref
+    FROM #candidates_stage
+      INNER JOIN opportunity ON linked_job = opportunity_ref
+    WHERE linked_job IS NOT NULL
+      AND responsible_team IN(SELECT team FROM #teams)
+    GROUP BY
+      linked_job
+      ,organisation_ref;
+
+    SELECT
+      organisation_ref
+    INTO #clients_stage
+    FROM organisation
+    WHERE responsible_team IN(SELECT team FROM #teams);
+
+    INSERT INTO #clients_stage
+    SELECT DISTINCT
+      organisation_ref
+    FROM search_code
+    WHERE search_type = 3
+      AND code_type = 1015
+      AND code IN(SELECT location FROM #locations)
+      AND organisation_ref IS NOT NULL;
+
+    INSERT INTO #clients_stage
+    SELECT
+      sc.organisation_ref
+    FROM search_code sc
+      INNER JOIN staff s ON sc.code = s.resp_user_code
+    WHERE s.team IN(SELECT team FROM #teams)
+      AND sc.search_type = 3
+      AND sc.code_type = 1055;
+
+    INSERT INTO #clients_stage
+    SELECT
+      organisation_ref
+    FROM #jobs_stage
+    WHERE organisation_ref IS NOT NULL
+    GROUP BY
+      organisation_ref;
+
+    DELETE FROM #clients_stage
+    WHERE organisation_ref IN(SELECT organisation_ref
+                              FROM organisation
+                              WHERE record_status = 'Y');
+
+    SELECT DISTINCT
+      person_ref
+    INTO #contacts_stage
+    FROM position
+    WHERE contact_status IN('2','3','4','6')
+      AND responsible_team IN(SELECT team FROM #teams);
+
+    INSERT INTO #contacts_stage
+    SELECT
+      person_ref
+    FROM search_code
+    WHERE search_type = 4
+      AND code_type = 1015
+      AND code IN(SELECT location FROM #locations)
+      AND person_ref IS NOT NULL;
+
+    INSERT INTO #contacts_stage
+    SELECT DISTINCT
+      pos.person_ref
+    FROM position pos
+      INNER JOIN search_code sc ON pos.position_ref = sc.position_ref
+      INNER JOIN staff s ON sc.code = s.resp_user_code
+    WHERE s.team IN(SELECT team FROM #teams)
+      AND pos.contact_status IN('2','3','4','6')
+      AND sc.search_type = 4
+      AND sc.code_type = 1055;
+
+    INSERT INTO #contacts_stage
+    SELECT
+      role.person_ref
+    FROM #jobs_stage stage
+      INNER JOIN opport_role role ON stage.opportunity_ref = role.opportunity_ref
+    WHERE role.role_type IN('C1', 'C2', 'C6')
+    GROUP BY
+      role.person_ref;
+
+    INSERT INTO #contacts_stage
+    SELECT
+      role.person_ref
+    FROM #jobs_stage stage
+      INNER JOIN event e ON stage.opportunity_ref = e.opportunity_ref
+      INNER JOIN event_role role ON e.event_ref = role.event_ref
+    WHERE role.type IN('C1', 'C2')
+    GROUP BY
+      role.person_ref;
+
+    SELECT DISTINCT organisation_ref
+    INTO #clients
+    FROM #clients_stage;
+
+    SELECT DISTINCT person_ref
+    INTO #contacts
+    FROM #contacts_stage;
+    CREATE UNIQUE INDEX contacts_idx ON #contacts (person_ref);
+
+    SELECT DISTINCT person_ref
+    INTO #candidates
+    FROM #candidates_stage;
+    CREATE UNIQUE INDEX candidates_idx ON #candidates (person_ref);
+
+    SELECT DISTINCT opportunity_ref
+    INTO #jobs
+    FROM #jobs_stage;
+    CREATE UNIQUE INDEX jobs_idx ON #jobs (opportunity_ref);
+
+
+----------------------------------------------------------------------------
 -- Load data for X_CLIENT_CON.CSV
 
     CALL logger('Load X_CLIENT_CON', log_file_path);
-
-    SELECT DISTINCT
-      organisation_ref
-    INTO #client_list
-    FROM opportunity
-    WHERE organisation_ref IN(658,4326,6603,16676,17354,17729,19979,
-                              24310,390450,391256,391412,393483,399584,477230,993271)
-    ;
 
     BEGIN
       DECLARE i INT;
       SET i = 0;
       WHILE (i < 6) LOOP
 
-        INSERT INTO #client_list
+        INSERT INTO #clients
         SELECT parent_organ_ref
         FROM organisation org
-          INNER JOIN #client_list cl ON org.organisation_ref = cl.organisation_ref
-        WHERE parent_organ_ref NOT IN(SELECT organisation_ref FROM #client_list);
+          INNER JOIN #clients cl ON org.organisation_ref = cl.organisation_ref
+        WHERE parent_organ_ref NOT IN(SELECT organisation_ref FROM #clients);
 
         SET i = i + 1;
       END LOOP;
     END;
 
-    CREATE UNIQUE INDEX p7m_client_list_idx ON #client_list (organisation_ref);
+    CREATE INDEX clients_idx ON #clients (organisation_ref);
 
     SELECT
       IDENTITY(10) AS [id]
@@ -436,7 +621,8 @@ perm_assign_deleted_event_outcome=DEL
       ,position_ref AS [contact]
     INTO #p7m_x_client_con
     FROM position pos
-    WHERE organisation_ref IN(SELECT organisation_ref FROM #client_list)
+    WHERE organisation_ref IN(SELECT organisation_ref FROM #clients)
+      AND pos.person_ref IN(SELECT person_ref FROM #contacts)
       AND pos.contact_status IN(SELECT [value]
                                 FROM #p7m_vars WHERE [key] = 'contact_contact_status_code')
       AND pos.record_status IN(SELECT [value]
@@ -480,7 +666,7 @@ perm_assign_deleted_event_outcome=DEL
       ,o.responsible_team AS [office]
       ,a.telephone_number AS [work_telephone]
       ,a.fax_number AS [fax_telephone]
-      ,REPLACE(REPLACE(o.notes, '\x0d', ''), '\x0a', '') AS [consultant_notes]
+      ,REPLACE(REPLACE(o.notes, '\x0d', ' '), '\x0a', ' ') AS [consultant_notes]
       ,parent_organ_ref AS parent_id
       ,CASE WHEN NULLIF(parent_organ_ref, 0) IS NULL THEN 'Y' ELSE 'N' END AS is_le
       ,CASE WHEN NULLIF(parent_organ_ref, 0) IS NULL THEN o.organisation_ref END AS le_id
@@ -493,7 +679,7 @@ perm_assign_deleted_event_outcome=DEL
                                                  ,MAX(create_timestamp))
                                    FROM address a1
                                    WHERE a.organisation_ref = a1.organisation_ref)
-    WHERE o.organisation_ref IN(SELECT organisation_ref FROM #client_list);
+    WHERE o.organisation_ref IN(SELECT organisation_ref FROM #clients);
 
     CREATE UNIQUE INDEX p7m_clients_idx ON #p7m_clients (client_id);
 
@@ -600,13 +786,14 @@ perm_assign_deleted_event_outcome=DEL
       ,pos.telephone_ext AS [work_extention]
       ,pos.fax_number AS [fax_no]
       ,pos.mobile_telno AS [mobile_no]
-      ,REPLACE(REPLACE(pos.notes, '\x0d', ''), '\x0a', '') AS [contact_notes]
+      ,REPLACE(REPLACE(pos.notes, '\x0d', ' '), '\x0a', ' ') AS [contact_notes]
     INTO #p7m_contacts
     FROM position pos
       INNER JOIN person per ON pos.person_ref = per.person_ref
       LEFT OUTER JOIN organisation org ON pos.organisation_ref = org.organisation_ref
       LEFT OUTER JOIN address a ON pos.address_ref = a.address_ref
-    WHERE pos.position_ref IN(SELECT contact FROM #p7m_x_client_con)
+    WHERE pos.person_ref IN(SELECT person_ref FROM #contacts)
+      AND pos.position_ref IN(SELECT contact FROM #p7m_x_client_con)
     ;
 
     CREATE UNIQUE INDEX p7m_contacts_idx ON #p7m_contacts (contact_id, person_id);
@@ -754,11 +941,8 @@ perm_assign_deleted_event_outcome=DEL
                   WHERE rl.role_type = [value]
                     AND [key] = 'job_contact_role_type')
       AND EXISTS (SELECT 1
-                  FROM #client_list c
-                  WHERE o.organisation_ref = c.organisation_ref)
-      AND EXISTS (SELECT 1
-                  FROM #p7m_contacts c
-                  WHERE rl.position_ref = c.contact_id);
+                  FROM #jobs c
+                  WHERE o.opportunity_ref = c.opportunity_ref);
 
     UPDATE #p7m_x_client_job
     SET [id] = IDENTITY(10);
@@ -811,11 +995,10 @@ perm_assign_deleted_event_outcome=DEL
       ,REPLACE(REPLACE(opp.notes, '\x0d', ' '), '\x0a', ' ') AS [personal_attributes]
     INTO #p7m_contract_jobs
     FROM opportunity opp
-      INNER JOIN #p7m_x_client_job x ON opp.organisation_ref = x.client
-                                    AND opp.opportunity_ref = x.job
       LEFT OUTER JOIN address a ON opp.address_ref = a.address_ref
       LEFT OUTER JOIN temporary_vac tv ON opp.opportunity_ref = tv.opportunity_ref
     WHERE opp.type IN(SELECT [value] FROM #p7m_vars WHERE [key] = 'job_contract_type')
+      AND opp.opportunity_ref IN(SELECT opportunity_ref FROM #jobs)
      ;
 
     CREATE UNIQUE INDEX p7m_contract_jobs_idx ON #p7m_contract_jobs (job_id);
@@ -980,12 +1163,11 @@ perm_assign_deleted_event_outcome=DEL
       ,REPLACE(REPLACE(opp.notes, '\x0d', ' '), '\x0a', ' ') AS [personal_attributes]
     INTO #p7m_perm_jobs
     FROM opportunity opp
-      INNER JOIN #p7m_x_client_job x ON opp.organisation_ref = x.client
-                                    AND opp.opportunity_ref = x.job
       LEFT OUTER JOIN address a ON opp.address_ref = a.address_ref
       LEFT OUTER JOIN permanent_vac pv ON opp.opportunity_ref = pv.opportunity_ref
     WHERE opp.type IN(SELECT [value]
                       FROM #p7m_vars WHERE [key] = 'job_perm_type')
+      AND opp.opportunity_ref IN(SELECT opportunity_ref FROM #jobs)
      ;
 
     CREATE UNIQUE INDEX p7m_perm_jobs_idx ON #p7m_perm_jobs (job_id);
@@ -1135,8 +1317,7 @@ perm_assign_deleted_event_outcome=DEL
       INNER JOIN event_role can ON e.event_ref = can.event_ref
     WHERE e.type IN('A', 'F', 'H', 'KE03', 'Q21', 'Q31', 'Q32', 'Q33', 'Q34', 'Q35', 'Q36')
       AND can.type IN('A','1', 'D', 'F', 'H', 'K')
-      AND (e.opportunity_ref IN(SELECT job_id FROM #p7m_contract_jobs) OR
-           e.opportunity_ref IN(SELECT job_id FROM #p7m_perm_jobs))
+      AND e.opportunity_ref IN(SELECT opportunity_ref FROM #jobs)
     GROUP BY
       e.opportunity_ref
       ,can.person_ref;
@@ -1376,7 +1557,7 @@ perm_assign_deleted_event_outcome=DEL
                   FROM person_type pts
                   WHERE pts.type IN('A', 'C')
                     AND per.person_ref = pts.person_ref)
-      AND per.person_ref IN(SELECT candidate_id FROM #p7m_shortlist)
+      AND per.person_ref IN(SELECT person_ref FROM #candidates)
     ;
 
     CREATE UNIQUE INDEX p7m_candidates_idx ON #p7m_candidates (candidate_id);
@@ -1406,6 +1587,7 @@ perm_assign_deleted_event_outcome=DEL
                                 FROM #p7m_vars WHERE [key] = 'candidate_hot_code')
                     AND c.candidate_id = sc.person_ref);
 
+
     UPDATE #p7m_candidates
     SET
       can.perm_consultant = pt.person_ref
@@ -1416,6 +1598,7 @@ perm_assign_deleted_event_outcome=DEL
       INNER JOIN staff s ON sc.code = s.resp_user_code
       INNER JOIN person_type pt ON pt.person_type_ref = s.person_type_ref
     WHERE search_type = 1
+      AND code_type = 1055
       AND code_type IN(SELECT [value_int]
                        FROM #p7m_vars WHERE [key] = 'candidate_tracking_consultant_code_type');
 
@@ -1573,8 +1756,7 @@ perm_assign_deleted_event_outcome=DEL
       LEFT OUTER JOIN address a ON pos.address_ref = a.address_ref
       LEFT OUTER JOIN #p7m_vars rs ON org.record_status = rs.[value]
                                   AND rs.[key] ='client_employer_only_record_status_code'
-    WHERE pos.organisation_ref IN(SELECT client_id FROM #p7m_clients)
-      AND pos.person_ref IN(SELECT candidate_id FROM #p7m_candidates);
+    WHERE pos.person_ref IN(SELECT person_ref FROM #candidates);
 
     CREATE INDEX candidate_prev_assign_idx ON #p7m_candidate_prev_assign (candidate_id);
 
@@ -1623,8 +1805,7 @@ perm_assign_deleted_event_outcome=DEL
                                                    FROM #p7m_vars
                                                    WHERE [key] = 'contact_record_status_code')
       LEFT OUTER JOIN address a ON pos.address_ref = a.address_ref
-    WHERE pos.organisation_ref IN(SELECT client_id FROM #p7m_clients)
-      AND pos.position_ref IN(SELECT contact_id FROM #p7m_contacts);
+    WHERE pos.person_ref IN(SELECT person_ref FROM #contacts);
 
     CREATE INDEX contact_prev_assign_idx ON #p7m_contact_prev_assign (candidate_id);
 
@@ -1733,8 +1914,8 @@ perm_assign_deleted_event_outcome=DEL
       INNER JOIN event_role cons ON e.event_ref = cons.event_ref
       LEFT OUTER JOIN u_v5invoice inv ON e.event_ref = inv.event_ref
       LEFT OUTER JOIN placing plc ON e.event_ref = plc.event_ref
-    WHERE opp.opportunity_ref IN(SELECT job_id FROM #p7m_perm_jobs)
-      AND can.person_ref IN(SELECT candidate_id FROM #p7m_candidates)
+    WHERE opp.opportunity_ref IN(SELECT opportunity_ref FROM #jobs)
+      AND can.person_ref IN(SELECT person_ref FROM #candidates)
       AND (e.type = '1PA' OR (e.type = 'F' AND e.outcome = 'F3'))
       AND e.outcome != 'DEL'
       AND can.type IN('A','1', 'D', 'F', 'H', 'K')
@@ -1820,8 +2001,8 @@ perm_assign_deleted_event_outcome=DEL
       INNER JOIN event_role can ON e.event_ref = can.event_ref
       INNER JOIN event_role cons ON e.event_ref = cons.event_ref
       LEFT OUTER JOIN temporary_booking tb ON e.event_ref = tb.event_ref
-    WHERE opp.opportunity_ref IN(SELECT job_id FROM #p7m_contract_jobs)
-      AND can.person_ref IN(SELECT candidate_id FROM #p7m_candidates)
+    WHERE opp.opportunity_ref IN(SELECT opportunity_ref FROM #jobs)
+      AND can.person_ref IN(SELECT person_ref FROM #candidates)
       AND e.type = 'H'
       AND e.outcome = 'F3'
       AND can.type IN('A','1', 'D', 'F', 'H', 'K')
@@ -1956,14 +2137,14 @@ perm_assign_deleted_event_outcome=DEL
                       ELSE MAX(CASE record_status WHEN 'C' THEN position_ref END)
                       END = con.position_ref)
       AND EXISTS (SELECT 1
-                  FROM #p7m_clients
-                  WHERE con.organisation_ref = client_id)
+                  FROM #clients
+                  WHERE con.organisation_ref = organisation_ref)
       AND EXISTS (SELECT 1
-                  FROM #p7m_contacts
-                  WHERE con.position_ref = contact_id)
+                  FROM #contacts
+                  WHERE con.person_ref = person_ref)
       AND EXISTS (SELECT 1
-                  FROM #p7m_candidates
-                  WHERE er_can.person_ref = candidate_id)
+                  FROM #candidates
+                  WHERE er_can.person_ref = person_ref)
     ;
 
     CREATE UNIQUE INDEX p7m_interviews_idx
@@ -2037,25 +2218,16 @@ perm_assign_deleted_event_outcome=DEL
       LEFT OUTER JOIN event_role cons ON e.event_ref = cons.event_ref
                                      AND cons.type = 'U1'
       LEFT OUTER JOIN #p7m_contacts c ON con.person_ref = c.person_id
-        AND c.contact_id
-          = (SELECT
-               CASE WHEN MAX(CASE record_status WHEN 'C' THEN position_ref END) IS NOT NULL
-                    THEN MAX(CASE record_status WHEN 'C' THEN position_ref END)
-                    ELSE MAX(CASE WHEN record_status != 'C' THEN position_ref END)
-                    END
-             FROM position pos_last
-             WHERE c.person_id = pos_last.person_ref)
     WHERE lu.code_type = 123
       AND jc.[key] IN('journal_general_event_type', 'journal_send_email_event_type',
                       'journal_call_made_log_event_type','journal_client_visit_event_type',
                       'journal_internal_interview_arranged_event_type')
       AND (e.organisation_ref IS NULL OR
-           e.organisation_ref IN(SELECT client_id FROM #p7m_clients))
+           e.organisation_ref IN(SELECT organisation_ref FROM #clients))
       AND (can.person_ref IS NULL OR
-           can.person_ref IN(SELECT candidate_id FROM #p7m_candidates))
+           can.person_ref IN(SELECT person_ref FROM #candidates))
       AND (e.opportunity_ref IS NULL OR
-           e.opportunity_ref IN(SELECT job_id FROM #p7m_contract_jobs) OR
-           e.opportunity_ref IN(SELECT job_id FROM #p7m_perm_jobs))
+           e.opportunity_ref IN(SELECT opportunity_ref FROM #jobs))
       AND ISNULL(e.organisation_ref, ISNULL(e.opportunity_ref, can.person_ref)) IS NOT NULL;
 
     SELECT
@@ -2321,7 +2493,7 @@ perm_assign_deleted_event_outcome=DEL
     WHERE type = 'WPC1'
       AND record_status = 'C'
       AND EXISTS (SELECT 1
-                  FROM #p7m_candidates
+                  FROM #candidates
                   WHERE l.parent_object_ref = candidate_id);
 
     CALL write_csv('documents', csv_file_path);
@@ -2339,9 +2511,9 @@ perm_assign_deleted_event_outcome=DEL
       || 'documents.bat'' '
       || ' FORMAT ASCII QUOTES off ESCAPES off');
 
-    CALL logger('Create ZIP file', log_file_path);
+--    CALL logger('Create ZIP file', log_file_path);
 
-    EXECUTE ('xp_cmdshell ''"' || csv_file_path || 'documents.bat" ''');
+--    EXECUTE ('xp_cmdshell ''"' || csv_file_path || 'documents.bat" ''');
 
     DROP TABLE #p7m_documents;
 
@@ -2361,3 +2533,4 @@ perm_assign_deleted_event_outcome=DEL
   END;
 
 END;
+
