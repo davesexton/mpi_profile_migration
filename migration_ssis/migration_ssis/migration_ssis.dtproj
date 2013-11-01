@@ -37,5 +37,10 @@
       <FullPath>copydata.dtsx</FullPath>
       <References />
     </DtsPackage>
+    <DtsPackage FormatVersion="3">
+      <Name>checks.dtsx</Name>
+      <FullPath>checks.dtsx</FullPath>
+      <References />
+    </DtsPackage>
   </DTSPackages>
 </Project>
