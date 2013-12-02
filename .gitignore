@@ -216,3 +216,4 @@ pip-log.txt
 
 #Project ingomores
 migration_csvs/
+import_csvs/
