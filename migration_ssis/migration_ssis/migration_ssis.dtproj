@@ -42,5 +42,10 @@
       <FullPath>checks.dtsx</FullPath>
       <References />
     </DtsPackage>
+    <DtsPackage FormatVersion="3">
+      <Name>importdata.dtsx</Name>
+      <FullPath>importdata.dtsx</FullPath>
+      <References />
+    </DtsPackage>
   </DTSPackages>
 </Project>
