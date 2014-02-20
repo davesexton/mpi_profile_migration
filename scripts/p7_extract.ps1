@@ -1,6 +1,6 @@
-$P7_SERVER_CSV_PATH = 's:\extract\'
-$MAPPED_CSV_PATH = 'y:\'
-$LOCAL_CSV_PATH = 'C:\Projects\temp\extract\'
+$P7_UNLOAD_PATH = 'c:\dxs\'
+$REMOTE_CSV_PATH = '\\10.240.104.51\dxs\'
+$LOCAL_CSV_PATH = 'C:\Projects\git\mpi_profile_migration\automation\import_csvs\'
 
 $P7_USER = 'kimknight'
 $P7_PASSWORD = 'kimknight'
@@ -11,6 +11,11 @@ $MIG_USER = 'migration'
 $MIG_PASSWORD = 'm1grat10n'
 $MIG_SERVER = '10.240.104.71\MIGRATION'
 $MIG_DATABASE = 'migration'
+
+# Live connections
+#$REMOTE_CSV_PATH = '\\ama-sr-prof-10.us.michaelpage.local\dxs\'
+#$P7_SERVER = 'ama-sr-prof-10.us.michaelpage.local'
+#$P7_DATABASE = 'p7nalive'
 
 $con_string = @'
 uid={0};
@@ -47,14 +52,8 @@ SELECT
   ,fax_number
   ,email_address
   ,notes
-  ,CASE WHEN create_timestamp BETWEEN CAST('1753-01-01 12:00:00' AS DATETIME)
-      AND CAST('9999-12-31 23:59:59' AS DATETIME)
-      THEN create_timestamp
-      END AS create_timestamp
-  ,CASE WHEN update_timestamp BETWEEN CAST('1753-01-01 12:00:00' AS DATETIME)
-      AND CAST('9999-12-31 23:59:59' AS DATETIME)
-      THEN update_timestamp
-      END AS update_timestamp
+  ,create_timestamp
+  ,update_timestamp
   ,record_status 
 FROM address
 WHERE address_ref > 0
@@ -68,10 +67,7 @@ SELECT
   ,income_required
   ,notice_period
   ,notice_period_mode
-  ,CASE WHEN date_available BETWEEN CAST('1753-01-01 12:00:00' AS DATETIME)
-      AND CAST('9999-12-31 23:59:59' AS DATETIME)
-      THEN date_available
-      END AS date_available
+  ,date_available
   ,part_time
   ,package_value_reqd 
 FROM candidate
@@ -83,34 +79,23 @@ sql = @"
 SELECT
   event_ref
   ,opportunity_ref
-  ,CASE WHEN event_date BETWEEN CAST('1753-01-01 12:00:00' AS DATETIME)
-      AND CAST('9999-12-31 23:59:59' AS DATETIME)
-      THEN event_date
-      END AS event_date
+  ,event_date
   ,event_time
   ,duration
   ,type
   ,notes
-  ,CASE WHEN create_timestamp BETWEEN CAST('1753-01-01 12:00:00' AS DATETIME)
-      AND CAST('9999-12-31 23:59:59' AS DATETIME)
-      THEN create_timestamp
-      END AS create_timestamp
+  ,create_timestamp
   ,create_user
-  ,CASE WHEN update_timestamp BETWEEN CAST('1753-01-01 12:00:00' AS DATETIME)
-      AND CAST('9999-12-31 23:59:59' AS DATETIME)
-      THEN update_timestamp
-      END AS update_timestamp
+  ,update_timestamp
   ,update_user
   ,record_status
   ,organisation_ref
   ,outcome
-  ,CASE WHEN outcome_date BETWEEN CAST('1753-01-01 12:00:00' AS DATETIME)
-      AND CAST('9999-12-31 23:59:59' AS DATETIME)
-      THEN outcome_date
-      END AS outcome_date
+  ,outcome_date
   ,position_ref 
 FROM event
-WHERE type IN('Q11','Q14','P15','KA1','G,P13','KE01','P05','KA2','P11','KD2','P14','Q13','Q15')
+WHERE type IN('A','F','H','KE03','Q21','Q11','Q14','P15','KA1','G','P13','Q31','Q32','1PA',
+              'Q33','Q34','Q35','Q36','KE01','P05','KA2','P11','KD2','P14','Q13','Q15')
 "@
 }
 $tables += New-Object PSObject -Property @{
@@ -126,7 +111,8 @@ WHERE event_role_ref > 0
   AND type IN('A1','1','D','F','H','K','C1','C2','U1','UC1')
   AND event_ref IN(SELECT event_ref
                    FROM event
-                   WHERE type IN('Q11','Q14','P15','KA1','G,P13','KE01','P05','KA2','P11','KD2','P14','Q13','Q15'))
+                   WHERE type IN('A','F','H','KE03','Q21','Q11','Q14','P15','KA1','G','P13','Q31','Q32','1PA',
+                                 'Q33','Q34','Q35','Q36','KE01','P05','KA2','P11','KD2','P14','Q13','Q15'))
 "@
 }
 $tables += New-Object PSObject -Property @{
@@ -138,10 +124,7 @@ SELECT
   ,parent_object_ref
   ,displayname
   ,type
-  ,CASE WHEN update_timestamp BETWEEN CAST('1753-01-01 12:00:00' AS DATETIME)
-      AND CAST('9999-12-31 23:59:59' AS DATETIME)
-      THEN update_timestamp
-      END AS update_timestamp
+  ,update_timestamp
   ,record_status
 FROM linkfile
 WHERE linkfile_ref > 0
@@ -197,25 +180,13 @@ SELECT
   ,type
   ,source
   ,notes
-  ,CASE WHEN date_opened BETWEEN CAST('1753-01-01 12:00:00' AS DATETIME)
-      AND CAST('9999-12-31 23:59:59' AS DATETIME)
-      THEN date_opened
-      END AS date_opened
-  ,CASE WHEN date_closed BETWEEN CAST('1753-01-01 12:00:00' AS DATETIME)
-      AND CAST('9999-12-31 23:59:59' AS DATETIME)
-      THEN date_closed
-      END AS date_closed
+  ,date_opened
+  ,date_closed
   ,responsible_user
   ,responsible_team
-  ,CASE WHEN create_timestamp BETWEEN CAST('1753-01-01 12:00:00' AS DATETIME)
-      AND CAST('9999-12-31 23:59:59' AS DATETIME)
-      THEN create_timestamp
-      END AS create_timestamp
+  ,create_timestamp
   ,create_user
-  ,CASE WHEN update_timestamp BETWEEN CAST('1753-01-01 12:00:00' AS DATETIME)
-      AND CAST('9999-12-31 23:59:59' AS DATETIME)
-      THEN update_timestamp
-      END AS update_timestamp
+  ,update_timestamp
   ,update_user
   ,record_status
 FROM opportunity
@@ -233,15 +204,9 @@ SELECT
   ,notes
   ,responsible_user
   ,responsible_team
-  ,CASE WHEN create_timestamp BETWEEN CAST('1753-01-01 12:00:00' AS DATETIME)
-      AND CAST('9999-12-31 23:59:59' AS DATETIME)
-      THEN create_timestamp
-      END AS create_timestamp
+  ,create_timestamp
   ,create_user
-  ,CASE WHEN update_timestamp BETWEEN CAST('1753-01-01 12:00:00' AS DATETIME)
-      AND CAST('9999-12-31 23:59:59' AS DATETIME)
-      THEN update_timestamp
-      END AS update_timestamp
+  ,update_timestamp
   ,update_user
   ,record_status
   ,financial_year_end
@@ -282,36 +247,21 @@ SELECT
   ,displayname
   ,mobile_telno
   ,email_address
-  ,CASE WHEN date_of_birth BETWEEN CAST('1753-01-01 12:00:00' AS DATETIME)
-      AND CAST('9999-12-31 23:59:59' AS DATETIME)
-      THEN date_of_birth
-      END AS date_of_birth
+  ,date_of_birth
   ,nationality
   ,source
   ,responsible_user
   ,responsible_team
-  ,CASE WHEN create_timestamp BETWEEN CAST('1753-01-01 12:00:00' AS DATETIME)
-      AND CAST('9999-12-31 23:59:59' AS DATETIME)
-      THEN create_timestamp
-      END AS create_timestamp
+  ,create_timestamp
   ,create_user
-  ,CASE WHEN update_timestamp BETWEEN CAST('1753-01-01 12:00:00' AS DATETIME)
-      AND CAST('9999-12-31 23:59:59' AS DATETIME)
-      THEN update_timestamp
-      END AS update_timestamp
+  ,update_timestamp
   ,update_user
   ,record_status
   ,own_car
   ,sole_agency
   ,discretion_reqd
-  ,CASE WHEN cv_last_updated BETWEEN CAST('1753-01-01 12:00:00' AS DATETIME)
-      AND CAST('9999-12-31 23:59:59' AS DATETIME)
-      THEN cv_last_updated
-      END AS cv_last_updated
-  ,CASE WHEN user_date1 BETWEEN CAST('1753-01-01 12:00:00' AS DATETIME)
-      AND CAST('9999-12-31 23:59:59' AS DATETIME)
-      THEN user_date1
-      END AS user_date1
+  ,cv_last_updated
+  ,user_date1
   ,day_telno
   ,do_not_mailshot 
 FROM person
@@ -335,10 +285,7 @@ name = 'placing'
 sql = @"
 SELECT
   event_ref
-  ,CASE WHEN start_date BETWEEN CAST('1753-01-01 12:00:00' AS DATETIME)
-      AND CAST('9999-12-31 23:59:59' AS DATETIME)
-      THEN start_date
-      END AS start_date
+  ,start_date
   ,income
 FROM placing
 "@
@@ -351,14 +298,8 @@ SELECT
   ,person_ref
   ,organisation_ref
   ,address_ref
-  ,CASE WHEN start_date BETWEEN CAST('1753-01-01 12:00:00' AS DATETIME)
-      AND CAST('9999-12-31 23:59:59' AS DATETIME)
-      THEN start_date
-      END AS start_date
-  ,CASE WHEN end_date BETWEEN CAST('1753-01-01 12:00:00' AS DATETIME)
-      AND CAST('9999-12-31 23:59:59' AS DATETIME)
-      THEN end_date
-      END AS end_date
+  ,start_date
+  ,end_date
   ,displayname
   ,manager_person_ref
   ,type
@@ -370,15 +311,9 @@ SELECT
   ,notes
   ,responsible_user
   ,responsible_team
-  ,CASE WHEN create_timestamp BETWEEN CAST('1753-01-01 12:00:00' AS DATETIME)
-      AND CAST('9999-12-31 23:59:59' AS DATETIME)
-      THEN create_timestamp
-      END AS create_timestamp
+  ,create_timestamp
   ,create_user
-  ,CASE WHEN update_timestamp BETWEEN CAST('1753-01-01 12:00:00' AS DATETIME)
-      AND CAST('9999-12-31 23:59:59' AS DATETIME)
-      THEN update_timestamp
-      END AS update_timestamp
+  ,update_timestamp
   ,update_user
   ,record_status
   ,mobile_telno
@@ -417,14 +352,8 @@ name = 'temporary_booking'
 sql = @"
 SELECT 
   event_ref
-  ,CASE WHEN start_date BETWEEN CAST('1753-01-01 12:00:00' AS DATETIME)
-      AND CAST('9999-12-31 23:59:59' AS DATETIME)
-      THEN start_date
-      END AS start_date
-  ,CASE WHEN end_date BETWEEN CAST('1753-01-01 12:00:00' AS DATETIME)
-      AND CAST('9999-12-31 23:59:59' AS DATETIME)
-      THEN end_date
-      END AS end_date
+  ,start_date
+  ,end_date
   ,rate1_payment
   ,rate1_invoice
   ,time_unit
@@ -446,14 +375,8 @@ name = 'temporary_vac'
 sql = @"
 SELECT
   opportunity_ref
-  ,CASE WHEN start_date BETWEEN CAST('1753-01-01 12:00:00' AS DATETIME)
-      AND CAST('9999-12-31 23:59:59' AS DATETIME)
-      THEN start_date
-      END AS start_date
-  ,CASE WHEN end_date BETWEEN CAST('1753-01-01 12:00:00' AS DATETIME)
-      AND CAST('9999-12-31 23:59:59' AS DATETIME)
-      THEN end_date
-      END AS end_date
+  ,start_date
+  ,end_date
   ,working_for
   ,rate1_payment
   ,rate1_invoice
@@ -474,22 +397,21 @@ FROM u_v5invoice
 "@
 }
 
-
 $con_string = $con_string -f $P7_USER, $P7_PASSWORD, $P7_SERVER, $P7_DATABASE
 $total_start_time = (Get-Date)
 
 $tables | ? {$_.name -eq 'position'} | % {
   $start_time = (Get-Date)
 
-  $sql = $extract_sql -f $_.sql, $P7_SERVER_CSV_PATH, $_.name
+  $sql = $extract_sql -f $_.sql, $P7_UNLOAD_PATH, $_.name
 
   dbisql -nogui -c $con_string "$sql"
 
-  Move-Item "$($MAPPED_CSV_PATH)$($_.name).csv" $LOCAL_CSV_PATH -Force
+  Copy-Item "$($REMOTE_CSV_PATH)$($_.name).csv" $LOCAL_CSV_PATH 
   
   sqlcmd -S $MIG_SERVER -U $MIG_USER -P $MIG_PASSWORD -Q "TRUNCATE TABLE $($MIG_DATABASE).profile.$($_.name)"
   
-  bcp "$($MIG_DATABASE).profile.$($_.name)" in "$($LOCAL_CSV_PATH)$($_.name).csv" -S $MIG_SERVER -U $MIG_USER -P $MIG_PASSWORD '-t,' -c -e "$($_.name)_error.log"
+  bcp "$($MIG_DATABASE).profile.$($_.name)" in "$($LOCAL_CSV_PATH)$($_.name).csv" -S $MIG_SERVER -U $MIG_USER -P $MIG_PASSWORD '-t,' -c -e "logs\$($_.name)_error.log"
   
   "$($_.Name.ToUpper()) - $(New-Timespan -Start $start_time -End (Get-Date))"
 }
