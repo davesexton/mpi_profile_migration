@@ -400,7 +400,7 @@ FROM u_v5invoice
 $con_string = $con_string -f $P7_USER, $P7_PASSWORD, $P7_SERVER, $P7_DATABASE
 $total_start_time = (Get-Date)
 
-$tables | ? {$_.name -eq 'position'} | % {
+$tables | ? {$_.name -ne 'xposition'} | % {
   $start_time = (Get-Date)
 
   $sql = $extract_sql -f $_.sql, $P7_UNLOAD_PATH, $_.name
