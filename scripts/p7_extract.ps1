@@ -109,6 +109,7 @@ SELECT
 FROM event_role
 WHERE event_role_ref > 0  
   AND type IN('A1','1','D','F','H','K','C1','C2','U1','UC1')
+  AND person_ref IS NOT NULL
   AND event_ref IN(SELECT event_ref
                    FROM event
                    WHERE type IN('A','F','H','KE03','Q21','Q11','Q14','P15','KA1','G','P13','Q31','Q32','1PA',
@@ -400,7 +401,7 @@ FROM u_v5invoice
 $con_string = $con_string -f $P7_USER, $P7_PASSWORD, $P7_SERVER, $P7_DATABASE
 $total_start_time = (Get-Date)
 
-$tables | ? {$_.name -ne 'xposition'} | % {
+$tables | ? {$_.name -eq 'event_role'} | % {
   $start_time = (Get-Date)
 
   $sql = $extract_sql -f $_.sql, $P7_UNLOAD_PATH, $_.name
