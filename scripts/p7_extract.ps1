@@ -26,7 +26,9 @@ Driver={{Adaptive Server Anywhere 9.0}};
 '@
 
 $extract_sql = @"
-UNLOAD {0} TO '{1}{2}.csv' 
+UNLOAD 
+{0} 
+TO '{1}{2}.csv' 
 FORMAT ASCII QUOTES off ESCAPES on
 "@
 
@@ -163,10 +165,7 @@ SELECT
   ,role_type
   ,position_ref 
 FROM opport_role
-WHERE role_type IN('C1') --job_contact_role_type
- AND opportunity_ref IN(SELECT opportunity_ref
-                        FROM profile.event
-                        WHERE type IN('Q11','Q14','P15','KA1','G,P13','KE01','P05','KA2','P11','KD2','P14','Q13','Q15'))
+WHERE role_type IN('C1','C2','C6') --job_contact_role_type
 "@
 }
 $tables += New-Object PSObject -Property @{
@@ -401,7 +400,7 @@ FROM u_v5invoice
 $con_string = $con_string -f $P7_USER, $P7_PASSWORD, $P7_SERVER, $P7_DATABASE
 $total_start_time = (Get-Date)
 
-$tables | ? {$_.name -eq 'event_role'} | % {
+$tables | ? {$_.name -eq 'opport_role'} | % {
   $start_time = (Get-Date)
 
   $sql = $extract_sql -f $_.sql, $P7_UNLOAD_PATH, $_.name
