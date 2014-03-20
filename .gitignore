@@ -217,5 +217,6 @@ pip-log.txt
 #Project ingomores
 migration_csvs/
 migration_delta_csvs/
+migration_delta_output_csvs/
 import_csvs/
 *.csv
