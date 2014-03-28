@@ -47,5 +47,10 @@
       <FullPath>importdata.dtsx</FullPath>
       <References />
     </DtsPackage>
+    <DtsPackage FormatVersion="3">
+      <Name>delta_migration.dtsx</Name>
+      <FullPath>delta_migration.dtsx</FullPath>
+      <References />
+    </DtsPackage>
   </DTSPackages>
 </Project>
